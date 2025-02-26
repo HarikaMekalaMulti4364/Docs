@@ -1,3 +1,7 @@
 python -m pip install "pymongo[srv]"==3.6
 
 mongodb+srv://harikamekala:qOWSuVwOcff3F9nl@cluster0.cv3nw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+
+export FIFTYONE_DATABASE_URL="mongodb://harikamekala:qOWSuVwOcff3F9nl@cluster0-shard-00-00.cv3nw.mongodb.net:27017,cluster0-shard-00-01.cv3nw.mongodb.net:27017,cluster0-shard-00-02.cv3nw.mongodb.net:27017/?replicaSet=atlas-xyz-shard-0"
+
+export FIFTYONE_DATABASE_URL="mongodb://harikamekala:qOWSuVwOcff3F9nl@cluster0-shard-00-00.cv3nw.mongodb.net:27017,cluster0-shard-00-01.cv3nw.mongodb.net:27017,cluster0-shard-00-02.cv3nw.mongodb.net:27017/?replicaSet=atlas-xyz-shard-0"
