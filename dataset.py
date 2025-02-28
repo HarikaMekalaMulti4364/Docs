@@ -190,3 +190,12 @@ def __getitem__(self, item):
         labels,
         torch.tensor([num_boxes]),
     )
+
+
+
+
+
+
+
+
+Previously, FiftyOne was used to manage dataset loading, which automatically handled dataset indexing, sample ordering, and annotations. Now, the dataset is directly loaded using torchvision.datasets.CocoDetection, which does not internally manage ID-to-index mappings in the same way.
