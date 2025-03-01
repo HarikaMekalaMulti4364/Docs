@@ -199,3 +199,33 @@ def __getitem__(self, item):
 
 
 Previously, FiftyOne was used to manage dataset loading, which automatically handled dataset indexing, sample ordering, and annotations. Now, the dataset is directly loaded using torchvision.datasets.CocoDetection, which does not internally manage ID-to-index mappings in the same way.
+
+
+
+
+
+
+
+import fiftyone as fo
+
+setup_fiftyone_env()
+
+split_str = "validation" if self.split == DatasetSplit.VAL else "train"
+
+# Load dataset from local directory instead of FiftyOne zoo
+self.dataset = fo.Dataset.from_dir(
+    dataset_dir=self.dataset_dir,
+    dataset_type=fo.types.COCODetectionDataset,
+    labels_path=f"{self.dataset_dir}/annotations/instances_{split_str}2017.json"
+)
+
+# Shuffle the dataset if needed
+if self.shuffle:
+    self.dataset.shuffle()
+
+# Limit to max_samples if specified
+if self.num_samples:
+    self.dataset = self.dataset.limit(self.num_samples)
+
+# Sort by filepath to ensure deterministic order
+self.dataset = self.dataset.sort_by("filepath")
