@@ -229,3 +229,18 @@ if self.num_samples:
 
 # Sort by filepath to ensure deterministic order
 self.dataset = self.dataset.sort_by("filepath")
+
+
+
+ images_dir = os.path.join(self.dataset_dir, split_str)
+    annotations_path = os.path.join(self.dataset_dir, "annotations", f"instances_{split_str}.json")
+
+    # Load COCO annotations
+    self.coco = COCO(annotations_path)
+    self.image_ids = list(self.coco.imgs.keys())
+    
+    # Store image file paths in a list (sorted for consistency)
+    self.dataset = sorted([
+        os.path.join(images_dir, self.coco.imgs[img_id]["file_name"])
+        for img_id in self.image_ids
+    ])
