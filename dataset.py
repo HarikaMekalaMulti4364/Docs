@@ -278,3 +278,14 @@ if annotations:  # Ensure there are annotations
 # Convert to PyTorch tensors
 boxes = torch.tensor(boxes, dtype=torch.float32)
 labels = torch.tensor(labels, dtype=torch.int64)
+
+
+import re
+
+# Extract the numeric part from the filename
+def extract_number(sample):
+    match = re.search(r"(\d+)", sample.filepath)  # Extract number from filename
+    return int(match.group(1)) if match else float("inf")  # Use 'inf' for safety
+
+# Sort the dataset by extracted numeric values
+self.dataset = self.dataset.sort_by(extract_number)
