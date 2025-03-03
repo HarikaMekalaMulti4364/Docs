@@ -244,3 +244,37 @@ self.dataset = self.dataset.sort_by("filepath")
         os.path.join(images_dir, self.coco.imgs[img_id]["file_name"])
         for img_id in self.image_ids
     ])
+
+
+
+
+# Get the image ID for COCO
+image_id = self.coco.getImgIds()[item]  # Assuming 'item' is the dataset index
+
+# Get annotations for this image
+annotation_ids = self.coco.getAnnIds(imgIds=image_id)
+annotations = self.coco.loadAnns(annotation_ids)
+
+boxes = []
+labels = []
+
+if annotations:  # Ensure there are annotations
+    for annotation in annotations:
+        category_id = annotation["category_id"]
+
+        # Convert COCO category_id to self.label_map index
+        if category_id not in self.label_map.values():
+            print(f"Warning: Invalid label {category_id}")
+            continue
+
+        # COCO format: (x, y, width, height)
+        x, y, w, h = annotation["bbox"]
+        boxes.append([x, y, x + w, y + h])
+
+        # Map category_id to label index
+        label_index = list(self.label_map.values()).index(category_id)
+        labels.append(label_index)
+
+# Convert to PyTorch tensors
+boxes = torch.tensor(boxes, dtype=torch.float32)
+labels = torch.tensor(labels, dtype=torch.int64)
