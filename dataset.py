@@ -289,3 +289,24 @@ def extract_number(sample):
 
 # Sort the dataset by extracted numeric values
 self.dataset = self.dataset.sort_by(extract_number)
+
+
+
+
+import re
+
+# Extract numeric part from filenames
+def extract_number(filepath):
+    match = re.search(r"(\d+)", filepath)
+    return int(match.group(1)) if match else float("inf")  # Use inf for safety
+
+# Get filepaths and their extracted numbers
+samples = [(sample, extract_number(sample.filepath)) for sample in self.dataset]
+
+# Sort samples by the extracted number
+sorted_samples = sorted(samples, key=lambda x: x[1])
+
+# Reorder the dataset
+self.dataset = fo.Dataset()
+for sample, _ in sorted_samples:
+    self.dataset.add_sample(sample)
