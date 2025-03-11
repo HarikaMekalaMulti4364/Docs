@@ -1,0 +1,25 @@
+import flatbuffers
+import tflite
+
+# Load TFLite model
+with open("model.tflite", "rb") as f:
+    buf = f.read()
+
+# Parse the model
+model = tflite.Model.GetRootAsModel(buf, 0)
+
+# Access subgraph (Usually there is only one subgraph)
+subgraph = model.Subgraphs(0)
+
+# Get Input and Output tensors
+input_tensor = subgraph.Tensors(0)  # Node 0
+output_tensor = subgraph.Tensors(39)  # Node 39
+
+print(f"Input Tensor: {input_tensor.Name().decode('utf-8')}")
+print(f"Output Tensor: {output_tensor.Name().decode('utf-8')}")
+
+# Now modify the subgraph to keep only necessary ops
+# This part requires creating a new FlatBuffer model with only the required tensors and ops.
+
+# TODO: Reconstruct the model with only input (0) → output (39)
+
