@@ -33,21 +33,21 @@ for img_name in tqdm(test_images):
     # Load HR Image
     orig_img = Image.open(hr_img_path)
 
-    # Create LR Image (downscale to 1/4 resolution)
-    lr_img = resizeimage.resize_cover(orig_img, [orig_img.width // 4, orig_img.height // 4], validate=False)
+    # Resize to model input size (224×224)
+    lr_img = resizeimage.resize_cover(orig_img, [224, 224], validate=False)
 
     # Convert to YCbCr
     img_ycbcr = lr_img.convert('YCbCr')
     img_y, img_cb, img_cr = img_ycbcr.split()
 
-    # Convert to numpy & normalize
+    # Convert Y channel to numpy & normalize
     img_ndarray = np.asarray(img_y).astype(np.float32) / 255.0
-    img_input = np.expand_dims(np.expand_dims(img_ndarray, axis=0), axis=0)  # Shape: (1,1,H,W)
+    img_input = np.expand_dims(np.expand_dims(img_ndarray, axis=0), axis=0)  # Shape: (1,1,224,224)
 
     # Run ONNX model
     input_name = ort_session.get_inputs()[0].name
     output_name = ort_session.get_outputs()[0].name
-    img_out_y = ort_session.run([output_name], {input_name: img_input})[0]
+    img_out_y = ort_session.run([output_name], {input_name: img_input})[0]  # Output: (1,1,672,672)
 
     # Post-processing
     img_out_y = np.squeeze(img_out_y)  # Remove batch & channel dimensions
@@ -56,7 +56,7 @@ for img_name in tqdm(test_images):
     # Convert numpy to PIL Image
     img_out_y = Image.fromarray(img_out_y)
 
-    # Resize Cb and Cr to match SR resolution
+    # Resize Cb and Cr channels to match SR resolution (672×672)
     img_cb = img_cb.resize(img_out_y.size, Image.BICUBIC)
     img_cr = img_cr.resize(img_out_y.size, Image.BICUBIC)
 
@@ -67,7 +67,7 @@ for img_name in tqdm(test_images):
     final_img.save(sr_img_path)
 
     # Convert HR Image to numpy for evaluation
-    hr_np = np.array(orig_img)
+    hr_np = np.array(orig_img.resize((672, 672), Image.BICUBIC))  # Resize HR for comparison
     sr_np = np.array(final_img)
 
     # Compute PSNR & SSIM
