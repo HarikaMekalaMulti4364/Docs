@@ -43,14 +43,23 @@ download_and_extract(IMAGENETTE_URL, DATASET_FOLDER)
 dataset_path = os.path.join(DATASET_FOLDER, "imagenette2-320")
 val_path = os.path.join(dataset_path, "val")  # Validation images
 
-# ✅ Move all images to `val/` and remove subfolders
+# ✅ Move all images to `val/` and track original class names
+image_label_map = []  # Store (new_image_path, label) pairs
 for class_folder in os.listdir(val_path):  # Iterate over class folders
     class_path = os.path.join(val_path, class_folder)
+    
     if os.path.isdir(class_path):  # Ensure it's a directory
-        for file in os.listdir(class_path):  # Iterate over images
-            file_path = os.path.join(class_path, file)
-            if os.path.isfile(file_path):  # Ensure it's a file
-                shutil.move(file_path, val_path)  # Move image to `val/`
+        class_label = IMAGENETTE_CLASS_MAP.get(class_folder, None)
+        
+        if class_label is not None:  # If it's a valid class folder
+            for file in os.listdir(class_path):  # Iterate over images
+                file_path = os.path.join(class_path, file)
+                
+                if os.path.isfile(file_path):  # Ensure it's a file
+                    new_file_path = os.path.join(val_path, file)  # New location
+                    shutil.move(file_path, new_file_path)  # Move image
+                    image_label_map.append((new_file_path, class_label))  # Track original class
+
         os.rmdir(class_path)  # Remove empty folder
 
 print(f"✅ All images moved to {val_path}, and subfolders removed!")
@@ -58,19 +67,8 @@ print(f"✅ All images moved to {val_path}, and subfolders removed!")
 # ✅ Generate `imagenet.txt`
 output_file = os.path.join(DATASET_FOLDER, "imagenet.txt")
 with open(output_file, "w") as f:
-    for file in os.listdir(val_path):  # Iterate through all images in `val/`
-        if file.endswith((".jpg", ".jpeg", ".png")):  # Ensure it's an image
-            img_path = os.path.join(val_path, file)  # Full image path
-            
-            # Extract class ID from filename (assuming format like n01440764_XXXXXX.jpg)
-            class_id = None
-            for class_name in IMAGENETTE_CLASS_MAP.keys():
-                if file.startswith(class_name):  # Match filename prefix
-                    class_id = IMAGENETTE_CLASS_MAP[class_name]
-                    break
-            
-            if class_id is not None:  # Only write if class ID was found
-                f.write(f"{img_path} {class_id}\n")
+    for img_path, class_id in image_label_map:
+        f.write(f"{img_path} {class_id}\n")
 
 print(f"✅ Generated {output_file} successfully with only test images!")
 
