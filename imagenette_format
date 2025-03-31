@@ -1,19 +1,14 @@
-# Install dependencies
-!pip install torchvision
-
 import os
-import shutil
 import tarfile
-from PIL import Image
-import torchvision.transforms as transforms
+import torchvision.datasets as datasets
+from torchvision.transforms import Compose, Resize, ToTensor
 from urllib.request import urlretrieve
 
-# ✅ Define constants
+# ✅ Define constants (Colab-compatible)
 IMAGENETTE_URL = "https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-320.tgz"
 DATASET_FOLDER = "/content/imagenette_data"
-EXTRACTED_FOLDER = os.path.join(DATASET_FOLDER, "imagenette2-320")
 
-# ✅ Imagenette class mapping to ImageNet labels
+# ✅ Mapping of Imagenette folders to original ImageNet class IDs
 IMAGENETTE_CLASS_MAP = {
     "n01440764": 0,    # Fish (Tench)
     "n02102040": 217,  # Dog (English Springer)
@@ -45,43 +40,20 @@ def download_and_extract(url, dest_folder):
 # ✅ Download Imagenette
 download_and_extract(IMAGENETTE_URL, DATASET_FOLDER)
 
-# ✅ Move images to `train/` and `test/`
-for split in ["train", "val"]:  # Imagenette uses "val" instead of "test"
-    old_split_path = os.path.join(EXTRACTED_FOLDER, split)
-    new_split_path = os.path.join(EXTRACTED_FOLDER, "test" if split == "val" else "train")
+# ✅ Define dataset paths (only validation set)
+dataset_path = os.path.join(DATASET_FOLDER, "imagenette2-320")
+val_path = os.path.join(dataset_path, "val")  # Only validation images
 
-    os.makedirs(new_split_path, exist_ok=True)  # Ensure new train/test folders exist
+# ✅ Load only validation dataset
+transform = Compose([Resize((224, 224)), ToTensor()])
+imagenette_dataset = datasets.ImageFolder(root=val_path, transform=transform)
 
-    # Move all images from subdirectories to new train/test folder
-    for class_folder in os.listdir(old_split_path):
-        class_folder_path = os.path.join(old_split_path, class_folder)
-
-        if os.path.isdir(class_folder_path):  # Ensure it's a folder
-            for img_file in os.listdir(class_folder_path):
-                old_img_path = os.path.join(class_folder_path, img_file)
-                new_img_path = os.path.join(new_split_path, img_file)
-                
-                shutil.move(old_img_path, new_img_path)  # Move image
-
-            shutil.rmtree(class_folder_path)  # Remove empty class folder
-
-# ✅ Generate imagenet.txt manually
-output_file = os.path.join(EXTRACTED_FOLDER, "imagenet.txt")
-
+# ✅ Save imagenet.txt with only test (validation) images
+output_file = os.path.join(DATASET_FOLDER, "imagenet.txt")
 with open(output_file, "w") as f:
-    for split in ["train", "test"]:
-        split_path = os.path.join(EXTRACTED_FOLDER, split)
-        
-        for img_file in os.listdir(split_path):
-            img_label = None
-            
-            # Extract class name from filename (assuming format "nXXXXX_*.JPEG")
-            for class_name in IMAGENETTE_CLASS_MAP.keys():
-                if img_file.startswith(class_name):
-                    img_label = IMAGENETTE_CLASS_MAP[class_name]
-                    break
+    for img_path, target in imagenette_dataset.samples:
+        folder_name = os.path.basename(os.path.dirname(img_path))  # Extract class folder
+        imagenet_label = IMAGENETTE_CLASS_MAP.get(folder_name, -1)  # Get ImageNet label (-1 if not found)
+        f.write(f"{img_path} {imagenet_label}\n")
 
-            if img_label is not None:
-                f.write(f"{split}/{img_file} {img_label}\n")
-
-print(f"Generated {output_file} successfully!")
+print(f"Generated {output_file} with only test images successfully!")
