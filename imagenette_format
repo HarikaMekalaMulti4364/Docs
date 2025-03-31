@@ -1,0 +1,87 @@
+# Install dependencies
+!pip install torchvision
+
+import os
+import shutil
+import tarfile
+from PIL import Image
+import torchvision.transforms as transforms
+from urllib.request import urlretrieve
+
+# ✅ Define constants
+IMAGENETTE_URL = "https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-320.tgz"
+DATASET_FOLDER = "/content/imagenette_data"
+EXTRACTED_FOLDER = os.path.join(DATASET_FOLDER, "imagenette2-320")
+
+# ✅ Imagenette class mapping to ImageNet labels
+IMAGENETTE_CLASS_MAP = {
+    "n01440764": 0,    # Fish (Tench)
+    "n02102040": 217,  # Dog (English Springer)
+    "n02979186": 482,  # Tape Cutter (Cassette Player)
+    "n03000684": 491,  # Chain Saw
+    "n03028079": 497,  # Church
+    "n03394916": 566,  # Musical Instrument (French Horn)
+    "n03417042": 569,  # Trash (Garbage Truck)
+    "n03425413": 571,  # Gas Pump
+    "n03445777": 574,  # Golf Ball
+    "n03888257": 701,  # Air Balloon (Parachute)
+}
+
+# ✅ Function to download and extract dataset
+def download_and_extract(url, dest_folder):
+    os.makedirs(dest_folder, exist_ok=True)
+    tar_path = os.path.join(dest_folder, os.path.basename(url))
+    
+    if not os.path.exists(tar_path):
+        print(f"Downloading {url}...")
+        urlretrieve(url, tar_path)
+        print("Download complete!")
+
+    print(f"Extracting {tar_path}...")
+    with tarfile.open(tar_path, "r:gz") as tar:
+        tar.extractall(path=dest_folder)
+    print("Extraction complete!")
+
+# ✅ Download Imagenette
+download_and_extract(IMAGENETTE_URL, DATASET_FOLDER)
+
+# ✅ Move images to `train/` and `test/`
+for split in ["train", "val"]:  # Imagenette uses "val" instead of "test"
+    old_split_path = os.path.join(EXTRACTED_FOLDER, split)
+    new_split_path = os.path.join(EXTRACTED_FOLDER, "test" if split == "val" else "train")
+
+    os.makedirs(new_split_path, exist_ok=True)  # Ensure new train/test folders exist
+
+    # Move all images from subdirectories to new train/test folder
+    for class_folder in os.listdir(old_split_path):
+        class_folder_path = os.path.join(old_split_path, class_folder)
+
+        if os.path.isdir(class_folder_path):  # Ensure it's a folder
+            for img_file in os.listdir(class_folder_path):
+                old_img_path = os.path.join(class_folder_path, img_file)
+                new_img_path = os.path.join(new_split_path, img_file)
+                
+                shutil.move(old_img_path, new_img_path)  # Move image
+
+            shutil.rmtree(class_folder_path)  # Remove empty class folder
+
+# ✅ Generate imagenet.txt manually
+output_file = os.path.join(EXTRACTED_FOLDER, "imagenet.txt")
+
+with open(output_file, "w") as f:
+    for split in ["train", "test"]:
+        split_path = os.path.join(EXTRACTED_FOLDER, split)
+        
+        for img_file in os.listdir(split_path):
+            img_label = None
+            
+            # Extract class name from filename (assuming format "nXXXXX_*.JPEG")
+            for class_name in IMAGENETTE_CLASS_MAP.keys():
+                if img_file.startswith(class_name):
+                    img_label = IMAGENETTE_CLASS_MAP[class_name]
+                    break
+
+            if img_label is not None:
+                f.write(f"{split}/{img_file} {img_label}\n")
+
+print(f"Generated {output_file} successfully!")
