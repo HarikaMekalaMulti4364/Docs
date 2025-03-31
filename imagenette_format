@@ -1,14 +1,13 @@
 import os
 import tarfile
-import torchvision.datasets as datasets
-from torchvision.transforms import Compose, Resize, ToTensor
+import shutil
 from urllib.request import urlretrieve
 
-# ✅ Define constants (Colab-compatible)
+# ✅ Define constants
 IMAGENETTE_URL = "https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-320.tgz"
 DATASET_FOLDER = "/content/imagenette_data"
 
-# ✅ Mapping of Imagenette folders to original ImageNet class IDs
+# ✅ Mapping of Imagenette folders to ImageNet class IDs
 IMAGENETTE_CLASS_MAP = {
     "n01440764": 0,    # Fish (Tench)
     "n02102040": 217,  # Dog (English Springer)
@@ -40,20 +39,43 @@ def download_and_extract(url, dest_folder):
 # ✅ Download Imagenette
 download_and_extract(IMAGENETTE_URL, DATASET_FOLDER)
 
-# ✅ Define dataset paths (only validation set)
+# ✅ Define dataset paths
 dataset_path = os.path.join(DATASET_FOLDER, "imagenette2-320")
-val_path = os.path.join(dataset_path, "val")  # Only validation images
+val_path = os.path.join(dataset_path, "val")  # Validation images
 
-# ✅ Load only validation dataset
-transform = Compose([Resize((224, 224)), ToTensor()])
-imagenette_dataset = datasets.ImageFolder(root=val_path, transform=transform)
+# ✅ Move all images to `val/` and remove subfolders
+for class_folder in os.listdir(val_path):  # Iterate over class folders
+    class_path = os.path.join(val_path, class_folder)
+    if os.path.isdir(class_path):  # Ensure it's a directory
+        for file in os.listdir(class_path):  # Iterate over images
+            file_path = os.path.join(class_path, file)
+            if os.path.isfile(file_path):  # Ensure it's a file
+                shutil.move(file_path, val_path)  # Move image to `val/`
+        os.rmdir(class_path)  # Remove empty folder
 
-# ✅ Save imagenet.txt with only test (validation) images
+print(f"✅ All images moved to {val_path}, and subfolders removed!")
+
+# ✅ Generate `imagenet.txt`
 output_file = os.path.join(DATASET_FOLDER, "imagenet.txt")
 with open(output_file, "w") as f:
-    for img_path, target in imagenette_dataset.samples:
-        folder_name = os.path.basename(os.path.dirname(img_path))  # Extract class folder
-        imagenet_label = IMAGENETTE_CLASS_MAP.get(folder_name, -1)  # Get ImageNet label (-1 if not found)
-        f.write(f"{img_path} {imagenet_label}\n")
+    for file in os.listdir(val_path):  # Iterate through all images in `val/`
+        if file.endswith((".jpg", ".jpeg", ".png")):  # Ensure it's an image
+            img_path = os.path.join(val_path, file)  # Full image path
+            
+            # Extract class ID from filename (assuming format like n01440764_XXXXXX.jpg)
+            class_id = None
+            for class_name in IMAGENETTE_CLASS_MAP.keys():
+                if file.startswith(class_name):  # Match filename prefix
+                    class_id = IMAGENETTE_CLASS_MAP[class_name]
+                    break
+            
+            if class_id is not None:  # Only write if class ID was found
+                f.write(f"{img_path} {class_id}\n")
 
-print(f"Generated {output_file} with only test images successfully!")
+print(f"✅ Generated {output_file} successfully with only test images!")
+
+# ✅ Debugging: Print first few lines of imagenet.txt
+with open(output_file, "r") as f:
+    lines = f.readlines()
+    print(f"📜 First few lines of {output_file}:")
+    print("".join(lines[:5]))  # Print first 5 lines
