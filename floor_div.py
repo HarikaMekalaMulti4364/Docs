@@ -22,13 +22,17 @@ def create_onnx_model():
     return model
 
 def create_tflite_model():
-    # Define TFLite model
-    converter = tf.lite.TFLiteConverter.from_concrete_functions([
-        tf.function(lambda x, y: tf.math.floordiv(x, y),
-                    input_signature=[tf.TensorSpec(shape=[None], dtype=tf.float32),
-                                     tf.TensorSpec(shape=[None], dtype=tf.float32)])
-    ])
+    class FloorDivModel(tf.Module):
+        @tf.function(input_signature=[tf.TensorSpec(shape=[None], dtype=tf.float32),
+                                      tf.TensorSpec(shape=[None], dtype=tf.float32)])
+        def floordiv(self, x, y):
+            return tf.math.floordiv(x, y)
+    
+    model = FloorDivModel()
+    concrete_func = model.floordiv.get_concrete_function()
+    converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func], model)
     tflite_model = converter.convert()
+    
     with open("floordiv.tflite", "wb") as f:
         f.write(tflite_model)
 
