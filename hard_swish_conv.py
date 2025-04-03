@@ -1,3 +1,43 @@
+import tensorflow as tf
+
+class TFModel(tf.Module):
+    def __init__(self):
+        super().__init__()
+
+    @tf.function(input_signature=[tf.TensorSpec(shape=[1, 5], dtype=tf.float32)])
+    def __call__(self, x):
+        return x * tf.nn.relu6(x + 3) / 6  # Manual HardSwish implementation
+
+# Create and save TFLite model
+tf_model = TFModel()
+converter = tf.lite.TFLiteConverter.from_concrete_functions([tf_model.__call__.get_concrete_function()])
+tflite_model = converter.convert()
+
+# Save TFLite model
+with open("hardswish_model.tflite", "wb") as f:
+    f.write(tflite_model)
+
+print("TFLite model created successfully!")
+
+# Step 2: Define an equivalent ONNX model with HardSwish
+class ONNXModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.hardswish = nn.Hardswish()
+
+    def forward(self, x):
+        return self.hardswish(x)
+
+# Create PyTorch model
+onnx_model = ONNXModel()
+
+# Convert to ONNX
+dummy_input = torch.randn(1, 5)
+torch.onnx.export(onnx_model, dummy_input, "hardswish_model.onnx", 
+                  input_names=["input"], output_names=["output"], opset_version=11)
+
+print("TFLite and ONNX models have been successfully created!")
+
 import numpy as np
 import tensorflow as tf
 import onnxruntime as ort
