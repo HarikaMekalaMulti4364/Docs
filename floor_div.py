@@ -1,6 +1,7 @@
 import numpy as np
 import onnxruntime as ort
 import onnx
+import tensorflow as tf
 from onnx import helper, TensorProto
 
 def create_onnx_model():
@@ -20,6 +21,17 @@ def create_onnx_model():
     model = helper.make_model(graph, producer_name="onnx_floordiv")
     return model
 
+def create_tflite_model():
+    # Define TFLite model
+    converter = tf.lite.TFLiteConverter.from_concrete_functions([
+        tf.function(lambda x, y: tf.math.floordiv(x, y),
+                    input_signature=[tf.TensorSpec(shape=[None], dtype=tf.float32),
+                                     tf.TensorSpec(shape=[None], dtype=tf.float32)])
+    ])
+    tflite_model = converter.convert()
+    with open("floordiv.tflite", "wb") as f:
+        f.write(tflite_model)
+
 # Generate test data
 x = np.array([7.5, -7.5, 8.9, -8.9], dtype=np.float32)
 y = np.array([2.0, 2.0, -2.0, -2.0], dtype=np.float32)
@@ -30,6 +42,9 @@ expected_output = np.floor(x / y)
 # Create ONNX model
 onnx_model = create_onnx_model()
 onnx.save(onnx_model, "floordiv.onnx")
+
+# Create TFLite model
+create_tflite_model()
 
 # Run inference using ONNX Runtime
 ort_session = ort.InferenceSession("floordiv.onnx")
