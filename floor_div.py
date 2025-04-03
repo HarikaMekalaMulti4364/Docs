@@ -5,10 +5,10 @@ import tensorflow as tf
 from onnx import helper, TensorProto
 
 def create_onnx_model():
-    # Define the inputs
-    X = helper.make_tensor_value_info("X", TensorProto.FLOAT, [None])
-    Y = helper.make_tensor_value_info("Y", TensorProto.FLOAT, [None])
-    Z = helper.make_tensor_value_info("Z", TensorProto.FLOAT, [None])
+    # Define the inputs with fixed shape
+    X = helper.make_tensor_value_info("X", TensorProto.FLOAT, [4])
+    Y = helper.make_tensor_value_info("Y", TensorProto.FLOAT, [4])
+    Z = helper.make_tensor_value_info("Z", TensorProto.FLOAT, [4])
 
     # Create the division operation
     div_node = helper.make_node("Div", ["X", "Y"], ["Div_Output"])
@@ -23,8 +23,8 @@ def create_onnx_model():
 
 def create_tflite_model():
     class FloorDivModel(tf.Module):
-        @tf.function(input_signature=[tf.TensorSpec(shape=[None], dtype=tf.float32),
-                                      tf.TensorSpec(shape=[None], dtype=tf.float32)])
+        @tf.function(input_signature=[tf.TensorSpec(shape=[4], dtype=tf.float32),
+                                      tf.TensorSpec(shape=[4], dtype=tf.float32)])
         def floordiv(self, x, y):
             return tf.math.floordiv(x, y)
     
