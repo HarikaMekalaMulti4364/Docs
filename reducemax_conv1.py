@@ -4,6 +4,7 @@ import onnx
 import onnxruntime as ort
 import numpy as np
 import onnx.helper as helper
+import onnx.numpy_helper as numpy_helper
 
 # ========================== Step 1: Create & Save TFLite Model ========================== #
 class ReduceMaxModelTF(tf.Module):
@@ -56,6 +57,11 @@ graph = helper.make_graph(
 
 # Create ONNX model
 onnx_model = helper.make_model(graph, producer_name="onnx-reducemax")
+
+# Fix attribute issue by explicitly specifying axes data type
+onnx_model.graph.input[1].type.tensor_type.elem_type = onnx.TensorProto.INT64
+
+# Save ONNX model
 onnx.save(onnx_model, "reducemax_model.onnx")
 
 print("✅ Fixed ONNX model saved as 'reducemax_model.onnx'")
