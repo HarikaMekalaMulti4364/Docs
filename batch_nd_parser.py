@@ -209,3 +209,22 @@ parser.write_list_to_initializer(steps, steps_name)
 # Final Slice
 parser.add_onnx_operator("Slice", [transposed, starts_name, ends_name, axes_name, steps_name], [output_name])
 
+5th attempt
+input_name = parser.get_tensor_name(parser.inputs[0])      # should be "x"
+output_name = parser.get_tensor_name(parser.outputs[0])    # should be "output"
+
+# Step 1: Reshape [4,1,1,1] → [2,2,1,1,1]
+reshaped1 = input_name + "_reshape1"
+reshape1_shape = reshaped1 + "_shape"
+parser.write_list_to_initializer([2, 2, 1, 1, 1], reshape1_shape)
+parser.add_onnx_operator("Reshape", [input_name, reshape1_shape], [reshaped1])
+
+# Step 2: Transpose [2,2,1,1,1] → [1,1,2,2,1] using perm [2, 3, 0, 1, 4]
+transposed = output_name + "_transposed"
+parser.add_onnx_permute_layer(reshaped1, transposed, perm=[2, 3, 0, 1, 4])
+
+# Step 3: Reshape [1,1,2,2,1] → [1,2,2,1]
+final_reshape = output_name
+final_shape_name = final_reshape + "_shape"
+parser.write_list_to_initializer([1, 2, 2, 1], final_shape_name)
+parser.add_onnx_operator("Reshape", [transposed, final_shape_name], [final_reshape])
