@@ -106,3 +106,57 @@ parser.write_list_to_initializer(steps, steps_name)
 # Final slice output
 parser.add_onnx_operator("Slice", [transposed, starts_name, ends_name, axes_name, steps_name], [output_name])
 
+
+3rd method
+input_name = parser.get_tensor_name(parser.inputs[0])      # "x"
+output_name = parser.get_tensor_name(parser.outputs[0])    # "output"
+
+# Step 1: Reshape input from [4,1,1,1] to [1,4,1,1]
+reshaped = input_name + "_reshape"
+reshape_shape_name = reshaped + "_shape"
+parser.write_list_to_initializer([1, 4, 1, 1], reshape_shape_name)
+parser.add_onnx_operator("Reshape", [input_name, reshape_shape_name], [reshaped])
+
+# Step 2: Apply DepthToSpace directly (input already in NCHW)
+block_shape = list(parser.get_constant_node(parser.inputs[1]))     # [2,2]
+assert block_shape[0] == block_shape[1]
+block_size = block_shape[0]
+d2s_output = output_name + "/d2s"
+parser.add_onnx_operator("DepthToSpace", [reshaped], [d2s_output],
+                         attr_dict=dict(blocksize=block_size))
+
+# Step 3: Transpose from NCHW to NHWC (if needed)
+transposed = output_name + "/NCHW_to_NHWC"
+parser.add_onnx_permute_layer(d2s_output, transposed, parser.NCHW_TO_NHWC)
+
+# Step 4: Add Slice (crop only H and W → axes = [1, 2])
+crops = list(parser.get_constant_node(parser.inputs[2]).flatten())  # [0, 0, 0, 0]
+begin = []
+end = []
+
+# We'll crop only axes 1 and 2 (H and W)
+# Index 1 and 2 in the original 4D crop list → crops[2] and crops[4] (skip batch and channel)
+# [N, H, W, C] NHWC → axes 1 and 2 are height and width
+
+begin.append(crops[2])  # crop begin for height
+end.append(-crops[3] if crops[3] != 0 else 0)  # crop end for height
+
+begin.append(crops[4])  # crop begin for width
+end.append(-crops[5] if crops[5] != 0 else 0)  # crop end for width
+
+axes = [1, 2]
+steps = [1, 1]
+
+# Write initializers
+axes_name = output_name + "crop_axes"
+starts_name = output_name + "crop_begin"
+ends_name = output_name + "crop_end"
+steps_name = output_name + "crop_steps"
+
+parser.write_list_to_initializer(axes, axes_name)
+parser.write_list_to_initializer(begin, starts_name)
+parser.write_list_to_initializer(end, ends_name)
+parser.write_list_to_initializer(steps, steps_name)
+
+# Final slice output
+parser.add_onnx_operator("Slice", [transposed, starts_name, ends_name, axes_name, steps_name], [output_name])
