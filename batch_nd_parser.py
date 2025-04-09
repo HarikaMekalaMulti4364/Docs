@@ -1,3 +1,8 @@
+(4,1,1,1)
+→ reshape → (2,2,1,1,1)        # batch → [block_H, block_W, N, H, W, C] style
+→ transpose → (1,1,2,2,1)     # reordering to align blocks spatially
+→ reshape → (1,2,2,1)         # flatten to expected output shape
+
 input_name = parser.get_tensor_name(parser.inputs[0])                      # "x"
 output_name = parser.get_tensor_name(parser.outputs[0])                   # "output"
 
