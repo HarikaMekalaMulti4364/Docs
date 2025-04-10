@@ -155,3 +155,52 @@ def parse_UNIDIRECTIONAL_SEQUENCE_LSTM(parser):
         [output_name],
         {"perm": [1, 0, 2]}  # [seq, batch, hidden] -> [batch, seq, hidden]
     )
+
+
+next2
+@Converter.Register("UNIDIRECTIONAL_SEQUENCE_LSTM")
+def parse_UNIDIRECTIONAL_SEQUENCE_LSTM(parser):
+    input_names = parser.write_inputs_to_onnx_net()
+    output_name = parser.get_tensor_name(parser.outputs[0])
+
+    hidden_size = 4
+    input_size = 8
+    batch_size = 32
+
+    # Correct ONNX shapes (no unsqueeze)
+    W = np.random.rand(1, 4 * hidden_size, input_size).astype(np.float32)
+    R = np.random.rand(1, 4 * hidden_size, hidden_size).astype(np.float32)
+    B = np.random.rand(1, 8 * hidden_size).astype(np.float32)
+
+    parser.add_ndarray_to_tensor_dict(f"{output_name}/W", W)
+    parser.add_ndarray_to_tensor_dict(f"{output_name}/R", R)
+    parser.add_ndarray_to_tensor_dict(f"{output_name}/B", B)
+
+    initial_h = np.zeros((1, batch_size, hidden_size), dtype=np.float32)
+    initial_c = np.zeros((1, batch_size, hidden_size), dtype=np.float32)
+    parser.add_ndarray_to_tensor_dict(f"{output_name}/initial_h", initial_h)
+    parser.add_ndarray_to_tensor_dict(f"{output_name}/initial_c", initial_c)
+
+    parser.add_onnx_operator(
+        "LSTM",
+        [
+            input_names[0],
+            f"{output_name}/W",
+            f"{output_name}/R",
+            f"{output_name}/B",
+            "",  # sequence_lens
+            f"{output_name}/initial_h",
+            f"{output_name}/initial_c",
+        ],
+        [f"{output_name}_o", f"{output_name}_h", f"{output_name}_c"],
+        {
+            "direction": "forward",
+            "hidden_size": hidden_size,
+            "layout": 0,  # [seq, batch, feat]
+        }
+    )
+
+    # Directly use output (if consumer can handle ONNX LSTM layout)
+    parser.add_onnx_operator(
+        "Identity", [f"{output_name}_o"], [output_name]
+    )
