@@ -319,3 +319,90 @@ def parse_UNIDIRECTIONAL_SEQUENCE_LSTM(parser):
         parser.add_onnx_operator(
             "Transpose", [squeeze_out_name], [output_name], {"perm": [1, 0, 2]}
         )
+
+
+next2
+@Converter.Register("UNIDIRECTIONAL_SEQUENCE_LSTM")
+def parse_UNIDIRECTIONAL_SEQUENCE_LSTM(parser):
+    input_names = parser.write_inputs_to_onnx_net()
+    output_name = parser.get_tensor_name(parser.outputs[0])
+
+    WRB_names = []
+    for _name in ["W", "R", "B"]:
+        WRB_names.append(output_name + "/" + _name)
+
+    input_reorder = [0, 3, 1, 2]  # ifco → iofc
+
+    # ---- Create dummy W, R, B tensors ----
+    hidden_size = 4
+    input_size = 8
+    batch_size = 32
+    seq_len = 10
+
+    # Create W
+    W_tensor = np.random.rand(1, 4 * hidden_size, input_size).astype(np.float32)
+    parser.add_ndarray_to_tensor_dict(output_name + "/W_data", W_tensor)
+    parser.add_onnx_operator(
+        "Unsqueeze",
+        [output_name + "/W_data", "const_0"],
+        [WRB_names[0]]
+    )
+
+    # Create R
+    R_tensor = np.random.rand(1, 4 * hidden_size, hidden_size).astype(np.float32)
+    parser.add_ndarray_to_tensor_dict(output_name + "/R_data", R_tensor)
+    parser.add_onnx_operator(
+        "Unsqueeze",
+        [output_name + "/R_data", "const_0"],
+        [WRB_names[1]]
+    )
+
+    # Create B
+    B_tensor = np.random.rand(1, 8 * hidden_size).astype(np.float32)
+    parser.add_ndarray_to_tensor_dict(output_name + "/B_data", B_tensor)
+    parser.add_onnx_operator(
+        "Unsqueeze",
+        [output_name + "/B_data", "const_0"],
+        [WRB_names[2]]
+    )
+
+    # ---- initial_h and initial_c ----
+    initial_h = np.zeros((1, batch_size, hidden_size), dtype=np.float32)
+    initial_c = np.zeros((1, batch_size, hidden_size), dtype=np.float32)
+    parser.add_ndarray_to_tensor_dict(output_name + "/initial_h", initial_h)
+    parser.add_ndarray_to_tensor_dict(output_name + "/initial_c", initial_c)
+
+    tensors_names = WRB_names + [output_name + "/initial_h", output_name + "/initial_c"]
+
+    # ---- Transpose layout ----
+    data_name = input_names[0]
+    squeeze_out_name = output_name
+    onnx_layout = 0
+    if onnx_layout == 0:
+        transposed_input = data_name + "/layout0"
+        parser.add_onnx_operator(
+            "Transpose", [data_name], [transposed_input], {"perm": [1, 0, 2]}
+        )
+        data_name = transposed_input
+        squeeze_out_name = output_name + "/SlBsHs"
+
+    # ---- ONNX LSTM ----
+    onnx_ip_names = [data_name, *tensors_names[:-2], "", *tensors_names[-2:]]
+    parser.add_onnx_operator(
+        "LSTM",
+        onnx_ip_names,
+        [output_name + "_o", output_name + "_h", output_name + "_c"],
+        {
+            "direction": "forward",
+            "hidden_size": hidden_size,
+            "layout": onnx_layout,
+        },
+    )
+
+    # Removed invalid Squeeze (was causing dimension error)
+    squeeze_out_name = output_name + "_o"
+
+    if onnx_layout == 0:
+        parser.add_onnx_operator(
+            "Transpose", [squeeze_out_name], [output_name], {"perm": [1, 0, 2]}
+        )
