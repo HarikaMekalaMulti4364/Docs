@@ -487,3 +487,67 @@ def parse_UNIDIRECTIONAL_SEQUENCE_LSTM(parser):
         parser.add_onnx_operator(
             "Transpose", [lstm_output], [output_name], {"perm": [1, 0, 2]}
         )
+
+next4
+@Converter.Register("UNIDIRECTIONAL_SEQUENCE_LSTM")
+def parse_UNIDIRECTIONAL_SEQUENCE_LSTM(parser):
+    input_names = parser.write_inputs_to_onnx_net()
+    output_name = parser.get_tensor_name(parser.outputs[0])
+
+    hidden_size = 4
+    input_size = 8
+    batch_size = 32
+
+    # ✅ Declare const_0 before any usage
+    parser.add_ndarray_to_tensor_dict("const_0", np.array([0], dtype=np.int64))
+
+    # ---- Create W, R, B ----
+    WRB = {
+        "W": np.random.rand(1, 4 * hidden_size, input_size).astype(np.float32),
+        "R": np.random.rand(1, 4 * hidden_size, hidden_size).astype(np.float32),
+        "B": np.random.rand(1, 8 * hidden_size).astype(np.float32),
+    }
+
+    WRB_names = []
+    for name, tensor in WRB.items():
+        tensor_name = f"{output_name}/{name}_data"
+        parser.add_ndarray_to_tensor_dict(tensor_name, tensor)
+        output_tensor = f"{output_name}/{name}"
+        parser.add_onnx_operator("Unsqueeze", [tensor_name, "const_0"], [output_tensor])
+        WRB_names.append(output_tensor)
+
+    # ---- initial_h and initial_c ----
+    init_h = np.zeros((1, batch_size, hidden_size), dtype=np.float32)
+    init_c = np.zeros((1, batch_size, hidden_size), dtype=np.float32)
+    parser.add_ndarray_to_tensor_dict(output_name + "/initial_h", init_h)
+    parser.add_ndarray_to_tensor_dict(output_name + "/initial_c", init_c)
+
+    # ---- Transpose input if using layout=0 ----
+    data_name = input_names[0]
+    onnx_layout = 0
+    if onnx_layout == 0:
+        transposed_input = f"{data_name}/layout0"
+        parser.add_onnx_operator(
+            "Transpose", [data_name], [transposed_input], {"perm": [1, 0, 2]}
+        )
+        data_name = transposed_input
+
+    # ---- LSTM operation ----
+    onnx_inputs = [data_name, *WRB_names, "", output_name + "/initial_h", output_name + "/initial_c"]
+    parser.add_onnx_operator(
+        "LSTM",
+        onnx_inputs,
+        [output_name + "_o", output_name + "_h", output_name + "_c"],
+        {
+            "direction": "forward",
+            "hidden_size": hidden_size,
+            "layout": onnx_layout,
+        },
+    )
+
+    # ✅ Avoid squeeze unless you're certain about the shape
+    # Post-process output if layout was changed
+    if onnx_layout == 0:
+        parser.add_onnx_operator(
+            "Transpose", [output_name + "_o"], [output_name], {"perm": [1, 0, 2]}
+        )
