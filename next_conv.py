@@ -72,3 +72,86 @@ def parse_UNIDIRECTIONAL_SEQUENCE_LSTM(parser):
             [output_name],
             {"perm": [1, 0, 2]},
         )
+
+next1
+@Converter.Register("UNIDIRECTIONAL_SEQUENCE_LSTM")
+def parse_UNIDIRECTIONAL_SEQUENCE_LSTM(parser):
+    input_names = parser.write_inputs_to_onnx_net()
+    output_name = parser.get_tensor_name(parser.outputs[0])
+
+    # === Declare const_0 first to avoid topological sort error ===
+    parser.add_ndarray_to_tensor_dict("const_0", np.array([0], dtype=np.int64))
+
+    # === Create dummy W, R, B tensors ===
+    hidden_size = 4
+    input_size = 8
+    batch_size = 32
+    seq_len = 10
+
+    WRB_names = []
+    for name in ["W", "R", "B"]:
+        WRB_names.append(f"{output_name}/{name}")
+
+    # --- W ---
+    W_tensor = np.random.rand(1, 4 * hidden_size, input_size).astype(np.float32)
+    parser.add_ndarray_to_tensor_dict(f"{output_name}/W_data", W_tensor)
+    parser.add_onnx_operator(
+        "Unsqueeze",
+        [f"{output_name}/W_data", "const_0"],
+        [WRB_names[0]]
+    )
+
+    # --- R ---
+    R_tensor = np.random.rand(1, 4 * hidden_size, hidden_size).astype(np.float32)
+    parser.add_ndarray_to_tensor_dict(f"{output_name}/R_data", R_tensor)
+    parser.add_onnx_operator(
+        "Unsqueeze",
+        [f"{output_name}/R_data", "const_0"],
+        [WRB_names[1]]
+    )
+
+    # --- B ---
+    B_tensor = np.random.rand(1, 8 * hidden_size).astype(np.float32)
+    parser.add_ndarray_to_tensor_dict(f"{output_name}/B_data", B_tensor)
+    parser.add_onnx_operator(
+        "Unsqueeze",
+        [f"{output_name}/B_data", "const_0"],
+        [WRB_names[2]]
+    )
+
+    # === initial_h and initial_c ===
+    initial_h = np.zeros((1, batch_size, hidden_size), dtype=np.float32)
+    initial_c = np.zeros((1, batch_size, hidden_size), dtype=np.float32)
+    parser.add_ndarray_to_tensor_dict(f"{output_name}/initial_h", initial_h)
+    parser.add_ndarray_to_tensor_dict(f"{output_name}/initial_c", initial_c)
+
+    # === Transpose layout (to match ONNX layout=0: [seq, batch, input]) ===
+    data_name = input_names[0]
+    layout_0_input = f"{data_name}/layout0"
+    parser.add_onnx_operator(
+        "Transpose",
+        [data_name],
+        [layout_0_input],
+        {"perm": [1, 0, 2]}  # [batch, seq, input] -> [seq, batch, input]
+    )
+
+    # === ONNX LSTM ===
+    lstm_output_names = [f"{output_name}_o", f"{output_name}_h", f"{output_name}_c"]
+    parser.add_onnx_operator(
+        "LSTM",
+        [layout_0_input, *WRB_names, "", f"{output_name}/initial_h", f"{output_name}/initial_c"],
+        lstm_output_names,
+        {
+            "direction": "forward",
+            "hidden_size": hidden_size,
+            "layout": 0
+        }
+    )
+
+    # === Final transpose to match expected output ===
+    parser.add_onnx_operator(
+        "Transpose",
+        [f"{output_name}_o"],
+        [output_name],
+        {"perm": [1, 0, 2]}  # [seq, batch, hidden] -> [batch, seq, hidden]
+    )
