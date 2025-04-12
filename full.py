@@ -113,15 +113,16 @@ def test_Fill(self):
     convert_filename = os.path.join(out_dir, "Fill.onnx")
 
     class FillModel(tf.Module):
-        def __init__(self, name=None):
-            super().__init__(name=name)
+    def __init__(self, name=None):
+        super().__init__(name=name)
 
-        @tf.function(input_signature=[
-            tf.TensorSpec([2], tf.int32),       # shape input
-            tf.TensorSpec([], tf.float32)       # scalar value to fill
-        ])
-        def __call__(self, shape, value):
-            return tf.raw_ops.Fill(dims=shape, value=value)
+    @tf.function(input_signature=[
+        tf.TensorSpec([2], tf.int32),         # shape input
+        tf.TensorSpec([], tf.float32)         # scalar value input as tensor
+    ])
+    def __call__(self, shape, value):
+        return tf.raw_ops.Fill(dims=shape, value=value)
+
 
     model = FillModel("test")
     self.convert_saved_model(model, filename)
