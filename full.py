@@ -49,3 +49,38 @@ def parse_BATCH_TO_SPACE_ND(parser):
     final_shape_name = final_reshape + "_shape"
     parser._write_list_to_initializer([1, 2, 2, 1], final_shape_name)
     parser.add_onnx_operator("Reshape", [transposed, final_shape_name], [final_reshape])
+
+
+
+##elu
+def test_ELU(self):
+    out_dir = self.generate_out_dir()
+    filename = os.path.join(out_dir, "ELU.tflite")
+    convert_filename = os.path.join(out_dir, "ELU.onnx")
+
+    class CustomModel(tf.Module):
+        def __init__(self, name=None):
+            super().__init__(name=name)
+
+        @tf.function(input_signature=[tf.TensorSpec([1, 4], tf.float32)])
+        def __call__(self, x):
+            return tf.nn.elu(x)  # TFLite ELU
+
+    model = CustomModel("elu_model")
+    self.convert_saved_model(model, filename)
+
+    is_pass, model_def, _, _ = tflite2mwnn(filename)
+    if not self.savespace:
+        onnx.save(model_def, convert_filename)
+    self.assertTrue(is_pass)
+@Converter.Register("ELU")
+def parse_ELU(parser):
+    """
+    Converts TFLite ELU to ONNX Elu operator.
+    TFLite ELU is equivalent to ONNX Elu with default alpha=1.0
+    """
+    input_name = parser.get_tensor_name(parser.inputs[0])
+    output_name = parser.get_tensor_name(parser.outputs[0])
+
+    # Add ELU node with default alpha=1.0 (or configurable if available)
+    parser.add_onnx_operator("Elu", [input_name], [output_name], attrs={"alpha": 1.0})
