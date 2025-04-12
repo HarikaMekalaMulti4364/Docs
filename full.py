@@ -83,4 +83,26 @@ def parse_ELU(parser):
     output_name = parser.get_tensor_name(parser.outputs[0])
 
     # Add ELU node with default alpha=1.0 (or configurable if available)
-    parser.add_onnx_operator("Elu", [input_name], [output_name], attrs={"alpha": 1.0})
+    parser.add_onnx_operator("Elu", [input_name], [output_name], attrs={"alpha": 1.0}
+
+#FILL
+@Converter.Register("FILL")
+def parse_FILL(parser):
+    # input_name = parser.get_tensor_name(parser.inputs[0])
+    input_name = parser.write_inputs_to_onnx_net()[0]
+    if parser.dtype_to_numpy_type[parser.inputs[0].Type()] != np.int64:
+        cast_name = input_name + "/cast_to_int64"
+        parser.add_onnx_operator(
+            "Cast", [input_name], [cast_name], attr_dict={"to": TensorProto.INT64}
+        )
+        input_name = cast_name
+    output_name = parser.get_tensor_name(parser.outputs[0])
+    filled_value = parser.get_constant_node(parser.inputs[1])
+    filled_value = filled_value.flatten()  # np scalar will become tensor of shape [1]
+    filled_value_name = output_name + "/fill_param"
+    filled_value_tensor = numpy_helper.from_array(filled_value, filled_value_name)
+    # filled_value_tensor = onnx.helper.make_tensor(filled_value_name, onnx.TensorProto.INT64, [1], [0])
+    attr_dict = {"value": filled_value_tensor}
+
+    parser.add_onnx_operator("ConstantOfShape", [input_name], [output_name], attr_dict)
+
