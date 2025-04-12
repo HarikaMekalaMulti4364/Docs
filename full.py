@@ -138,39 +138,7 @@ def parse_HARD_SWISH(parser):
     input_name = parser.get_tensor_name(parser.inputs[0])
     output_name = parser.get_tensor_name(parser.outputs[0])
 
-    # Step 1: x + 3
-    add_out = input_name + "_plus_3"
-    parser.add_onnx_operator(
-        "Add",
-        [input_name, parser.make_constant_tensor(input_name + "_const_3", 3.0)],
-        [add_out]
-    )
-
-    # Step 2: relu6(x + 3) = min(relu(x + 3), 6)
-    relu_out = add_out + "_relu"
-    parser.add_onnx_operator("Relu", [add_out], [relu_out])
-
-    relu6_out = relu_out + "_relu6"
-    parser.add_onnx_operator(
-        "Min",
-        [relu_out, parser.make_constant_tensor(input_name + "_const_6", 6.0)],
-        [relu6_out]
-    )
-
-    # Step 3: relu6 / 6
-    div_out = relu6_out + "_div6"
-    parser.add_onnx_operator(
-        "Div",
-        [relu6_out, parser.make_constant_tensor(input_name + "_const_6div", 6.0)],
-        [div_out]
-    )
-
-    # Step 4: x * (relu6 / 6)
-    parser.add_onnx_operator(
-        "Mul",
-        [input_name, div_out],
-        [output_name]
-    )
+    parser.add_onnx_operator("HardSwish", [input_name], [output_name])
 
 def test_HardSwish(self):
     out_dir = self.generate_out_dir()
