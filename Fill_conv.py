@@ -8,11 +8,11 @@ def test_fill(self):
             super().__init__(name=name)
 
         @tf.function(input_signature=[
-            tf.TensorSpec(shape=[2], dtype=tf.int32),  # shape tensor
-            tf.TensorSpec(shape=[], dtype=tf.float32),  # scalar value
+            tf.TensorSpec(shape=[2], dtype=tf.int32),     # Shape tensor
+            tf.TensorSpec(shape=[1], dtype=tf.float32),   # Scalar value as 1-element tensor
         ])
         def __call__(self, shape, value):
-            y = tf.fill(dims=shape, value=value)
+            y = tf.fill(dims=shape, value=value[0])  # Extract scalar from 1-element tensor
             return y
 
     model = CustomModel("test_fill")
@@ -26,24 +26,23 @@ def test_fill(self):
 
 @Converter.Register("FILL")
 def parse_FILL(parser):
-    shape_name = parser.get_tensor_name(parser.inputs[0])  # Shape tensor
-    value_name = parser.get_tensor_name(parser.inputs[1])  # Scalar value
+    shape_name = parser.get_tensor_name(parser.inputs[0])   # Shape tensor
+    value_name = parser.get_tensor_name(parser.inputs[1])   # Dynamic scalar tensor
     output_name = parser.get_tensor_name(parser.outputs[0])
 
     ip_quant_params = parser._get_input_quantization_params()
     op_quant_params = parser._get_output_quantization_params()
 
-    # ONNX ConstantOfShape expects the value as an attribute, not a dynamic tensor.
-    # So you need to make sure value is constant
-    value = parser.get_constant_node(parser.inputs[1])
-    value_tensor = numpy.array(value).astype(numpy.float32)
-    const_value_name = parser.make_const(name="fill_value", np_val=value_tensor)
+    # ONNX doesn’t support dynamic value in ConstantOfShape directly.
+    # So use Shape -> Gather -> Unsqueeze to extract the scalar
+    value_reshaped = parser.make_reshape(value_name, [], "scalar_fill_value")  # [1] -> scalar
 
     parser.add_onnx_operator(
         "ConstantOfShape",
         [shape_name],
         [output_name],
-        {"value": helper.make_tensor("value", TensorProto.FLOAT, [], value_tensor.tolist())},
+        {"value": None},   # Pass via dynamic input instead of attribute
         ip_quant_params,
-        op_quant_params
+        op_quant_params,
+        value_tensor=value_reshaped  # Custom param in your parser to handle dynamic init value
     )
