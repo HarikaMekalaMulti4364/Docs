@@ -1,91 +1,35 @@
-import tensorflow as tf
-import torch
-import onnx
-import onnxruntime as ort
-import numpy as np
-import onnx.helper as helper
-import onnx.numpy_helper as numpy_helper
+def test_reduce_max(self):
+    out_dir = self.generate_out_dir()
+    filename = os.path.join(out_dir, "reduce_max.tflite")
+    convert_filename = os.path.join(out_dir, "reduce_max.onnx")
 
-# ========================== Step 1: Create & Save TFLite Model ========================== #
-class ReduceMaxModelTF(tf.Module):
-    def __init__(self):
-        super().__init__()
+    class CustomModel(tf.Module):
+        def __init__(self, name):
+            super().__init__(name=name)
 
-    @tf.function(input_signature=[tf.TensorSpec(shape=[1, 3, 3], dtype=tf.float32)])
-    def __call__(self, x):
-        return tf.math.reduce_max(x, axis=2, keepdims=True)
+        @tf.function(input_signature=[tf.TensorSpec([10, 10], tf.float32)])
+        def __call__(self, x):
+            y = tf.math.reduce_max(input_tensor=x)
+            return y
 
-# Create TensorFlow model
-model_tf = ReduceMaxModelTF()
+    reduce_max = CustomModel("test")
+    self.convert_saved_model(reduce_max, filename)
 
-# Convert to TFLite
-converter = tf.lite.TFLiteConverter.from_concrete_functions(
-    [model_tf.__call__.get_concrete_function()], trackable_obj=model_tf
-)
-tflite_model = converter.convert()
+    is_pass, model_def, _, _ = tflite2mwnn(filename)
+    if not self.savespace:
+        onnx.save(model_def, convert_filename)
+    self.assertTrue(is_pass)
 
-# Save the TFLite model
-with open("reducemax_model.tflite", "wb") as f:
-    f.write(tflite_model)
 
-print("✅ TFLite model saved as 'reducemax_model.tflite'")
-
-# ========================== Step 2: Create & Save ONNX Model ========================== #
-# Define input and output tensor
-input_tensor = helper.make_tensor_value_info("input", onnx.TensorProto.FLOAT, [1, 3, 3])
-output_tensor = helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [1, 3, 1])
-
-# Define 'axes' as an initializer tensor (Fixing InvalidGraph issue)
-axes_tensor = numpy_helper.from_array(np.array([2], dtype=np.int64), name="axes")
-
-# Define ReduceMax Node
-reduce_max_node = helper.make_node(
-    "ReduceMax",
-    inputs=["input", "axes"],  # Now takes 'axes' as an input
-    outputs=["output"],
-    keepdims=1
-)
-
-# Create graph
-graph = helper.make_graph(
-    [reduce_max_node],
-    "ReduceMaxGraph",
-    [input_tensor],
-    [output_tensor],
-    [axes_tensor]  # Include 'axes' tensor in initializers
-)
-
-# Create ONNX model
-onnx_model = helper.make_model(graph, producer_name="onnx-reducemax")
-onnx.save(onnx_model, "reducemax_model.onnx")
-
-print("✅ Fixed ONNX model saved as 'reducemax_model.onnx'")
-
-# ========================== Step 3: Run Inference & Compare Outputs ========================== #
-# Generate a random input tensor
-input_data = np.random.rand(1, 3, 3).astype(np.float32)
-
-# Run TFLite Inference
-interpreter = tf.lite.Interpreter(model_path="reducemax_model.tflite")
-interpreter.allocate_tensors()
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
-
-interpreter.set_tensor(input_details[0]['index'], input_data)
-interpreter.invoke()
-tflite_output = interpreter.get_tensor(output_details[0]['index'])
-
-# Run ONNX Inference
-ort_session = ort.InferenceSession("reducemax_model.onnx")
-onnx_output = ort_session.run(None, {"input": input_data})[0]
-
-# Compare outputs
-print("\n🔍 Input Tensor:\n", input_data)
-print("\n📌 TFLite Output:\n", tflite_output)
-print("\n📌 ONNX Output:\n", onnx_output)
-
-# Check if outputs match
-if np.allclose(tflite_output, onnx_output, atol=1e-5):
-    print("\n✅ Outputs Match! The ONNX and TFLite models are equivalent.")
-else:
-    print("\n❌ Outputs Mismatch! Further debugging needed.")
+@Converter.Register("REDUCE_MAX")
+def parse_REDUCE_MAX(parser):
+    input_name = parser.get_tensor_name(parser.inputs[0])
+    output_name = parser.get_tensor_name(parser.outputs[0])
+    ip_quant_params = parser._get_input_quantization_params()
+    op_quant_params = parser._get_output_quantization_params()
+    axes = list(parser.get_constant_node(parser.inputs[1]))
+    keepdims = parser.option.KeepDims()
+    parser.add_onnx_operator(
+        "ReduceMax", [input_name], [output_name], {"axes": axes, "keepdims": keepdims},
+        ip_quant_params, op_quant_params
+    )
