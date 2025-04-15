@@ -1,84 +1,49 @@
-import tensorflow as tf
-import onnx
-import onnxruntime as ort
-import numpy as np
-from onnx import helper, TensorProto
-import tensorflow.lite as tflite
+def test_fill(self):
+    out_dir = self.generate_out_dir()
+    filename = os.path.join(out_dir, "fill.tflite")
+    convert_filename = os.path.join(out_dir, "fill.onnx")
 
-# ================================
-# Step 1: Create TensorFlow Model
-# ================================
-class FillModel(tf.Module):
-    @tf.function(input_signature=[tf.TensorSpec(shape=[2], dtype=tf.int64)])
-    def fill_tensor(self, shape):
-        value = tf.constant(5.0, dtype=tf.float32)  # Fill value
-        return tf.fill(shape, value)
+    class CustomModel(tf.Module):
+        def __init__(self, name):
+            super().__init__(name=name)
 
-# Create model instance
-fill_model = FillModel()
+        @tf.function(input_signature=[
+            tf.TensorSpec(shape=[2], dtype=tf.int32),  # shape tensor
+            tf.TensorSpec(shape=[], dtype=tf.float32),  # scalar value
+        ])
+        def __call__(self, shape, value):
+            y = tf.fill(dims=shape, value=value)
+            return y
 
-# Convert TensorFlow model to TFLite
-converter = tf.lite.TFLiteConverter.from_concrete_functions(
-    [fill_model.fill_tensor.get_concrete_function()]
-)
-tflite_model = converter.convert()
+    model = CustomModel("test_fill")
+    self.convert_saved_model(model, filename)
 
-# Save the TFLite model
-with open("fill_model.tflite", "wb") as f:
-    f.write(tflite_model)
-print("✅ TFLite model saved: fill_model.tflite")
+    is_pass, model_def, _, _ = tflite2mwnn(filename)
+    if not self.savespace:
+        onnx.save(model_def, convert_filename)
+    self.assertTrue(is_pass)
 
-# ================================
-# Step 2: Create ONNX Model
-# ================================
-node = helper.make_node(
-    "ConstantOfShape",
-    inputs=["shape"],
-    outputs=["output"],
-    value=helper.make_tensor(
-        name="value",
-        data_type=TensorProto.FLOAT,
-        dims=[1],  # Must be 1D
-        vals=[5.0],
-    ),
-)
 
-# Define model inputs/outputs
-shape_tensor = helper.make_tensor_value_info("shape", TensorProto.INT64, [2])
-output_tensor = helper.make_tensor_value_info("output", TensorProto.FLOAT, [None])
+@Converter.Register("FILL")
+def parse_FILL(parser):
+    shape_name = parser.get_tensor_name(parser.inputs[0])  # Shape tensor
+    value_name = parser.get_tensor_name(parser.inputs[1])  # Scalar value
+    output_name = parser.get_tensor_name(parser.outputs[0])
 
-# Create ONNX graph & model
-graph = helper.make_graph([node], "Fill_Example", [shape_tensor], [output_tensor])
-model = helper.make_model(graph)
-onnx.save(model, "fill_example.onnx")
-print("✅ ONNX model saved: fill_example.onnx")
+    ip_quant_params = parser._get_input_quantization_params()
+    op_quant_params = parser._get_output_quantization_params()
 
-# ================================
-# Step 3: Run Inference
-# ================================
+    # ONNX ConstantOfShape expects the value as an attribute, not a dynamic tensor.
+    # So you need to make sure value is constant
+    value = parser.get_constant_node(parser.inputs[1])
+    value_tensor = numpy.array(value).astype(numpy.float32)
+    const_value_name = parser.make_const(name="fill_value", np_val=value_tensor)
 
-# Run ONNX model
-onnx_input = {"shape": np.array([2, 3], dtype=np.int64)}
-ort_session = ort.InferenceSession("fill_example.onnx")
-onnx_result = ort_session.run(None, onnx_input)[0]
-print("\nONNX ConstantOfShape Output:\n", onnx_result)
-
-# Run TFLite model
-interpreter = tflite.Interpreter(model_path="fill_model.tflite")
-interpreter.allocate_tensors()
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
-
-# Prepare input and run inference
-shape_input = np.array([2, 3], dtype=np.int64)
-interpreter.set_tensor(input_details[0]['index'], shape_input)
-interpreter.invoke()
-tflite_output = interpreter.get_tensor(output_details[0]['index'])
-
-print("\nTFLite Fill Output:\n", tflite_output)
-
-# ================================
-# Step 4: Compare Outputs
-# ================================
-match = np.array_equal(onnx_result, tflite_output)
-print("\n✅ Outputs Match:", match)
+    parser.add_onnx_operator(
+        "ConstantOfShape",
+        [shape_name],
+        [output_name],
+        {"value": helper.make_tensor("value", TensorProto.FLOAT, [], value_tensor.tolist())},
+        ip_quant_params,
+        op_quant_params
+    )
