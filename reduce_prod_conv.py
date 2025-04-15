@@ -1,80 +1,35 @@
-import tensorflow as tf
-import numpy as np
-import onnx
-import onnxruntime as ort
-from onnx import helper, TensorProto
+def test_reduce_prod(self):
+        out_dir = self.generate_out_dir()
+        filename = os.path.join(out_dir, "reduce_prod.tflite")
+        convert_filename = os.path.join(out_dir, "reduce_prod.onnx")
 
-# Step 1: Create TFLite model with dynamic axis
-def create_tflite_model():
-    class ReduceProdModule(tf.Module):
-        @tf.function(input_signature=[
-            tf.TensorSpec(shape=[2, 3], dtype=tf.float32),
-            tf.TensorSpec(shape=[1], dtype=tf.int32)
-        ])
-        def __call__(self, x, axis):
-            return tf.math.reduce_prod(x, axis=axis)
+        class CustomModel(tf.Module):
+            def __init__(self, name):
+                super().__init__(name=name)
 
-    model = ReduceProdModule()
-    concrete_func = model.__call__.get_concrete_function()
-    converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
-    tflite_model = converter.convert()
+            @tf.function(input_signature=[tf.TensorSpec([10, 10], tf.float32)])
+            def __call__(self, x):
+                y = tf.math.reduce_prod(input_tensor=x)
+                return y
 
-    with open("reduce_prod_model.tflite", "wb") as f:
-        f.write(tflite_model)
+        reduce_prod = CustomModel("test")
+        self.convert_saved_model(reduce_prod, filename)
 
-    return "reduce_prod_model.tflite"
+        is_pass, model_def, _, _ = tflite2mwnn(filename)
+        if not self.savespace:
+            onnx.save(model_def, convert_filename)
+        self.assertTrue(is_pass)
 
-# Step 2: Create ONNX model with dynamic axis input
-# Fix: axes is an attribute, not an input
-def create_onnx_model():
-    input_tensor = helper.make_tensor_value_info("input", TensorProto.FLOAT, [2, 3])
-    output_tensor = helper.make_tensor_value_info("output", TensorProto.FLOAT, [2])
-
-    reduce_node = helper.make_node(
-        "ReduceProd",
-        inputs=["input"],             # only input tensor
-        outputs=["output"],
-        axes=[1],                     # static attribute
-        keepdims=0
+@Converter.Register("REDUCE_PROD")
+def parse_REDUCE_PROD(parser):
+    # input_names = parser.write_inputs_to_onnx_net()
+    input_name = parser.get_tensor_name(parser.inputs[0])
+    output_name = parser.get_tensor_name(parser.outputs[0])
+    ip_quant_params = parser._get_input_quantization_params()
+    op_quant_params = parser._get_output_quantization_params()
+    axes = list(parser.get_constant_node(parser.inputs[1]))
+    keepdims = parser.option.KeepDims()
+    parser.add_onnx_operator(
+        "ReduceProd", [input_name], [output_name], {"axes": axes, "keepdims": keepdims},
+        ip_quant_params, op_quant_params
     )
-
-    graph = helper.make_graph(
-        [reduce_node],
-        "ReduceProdGraphFixed",
-        inputs=[input_tensor],
-        outputs=[output_tensor]
-    )
-
-    model = helper.make_model(graph, opset_imports=[helper.make_operatorsetid("", 13)])
-    onnx.save(model, "reduce_prod_model.onnx")
-    return "reduce_prod_model.onnx"
-
-# Step 3: Compare outputs
-def compare_outputs(tflite_path, onnx_path):
-    input_data = np.array([[1, 2, 3], [4, 5, 6]], dtype=np.float32)
-    axis = np.array([1], dtype=np.int32)
-
-    # TFLite inference
-    interpreter = tf.lite.Interpreter(model_path=tflite_path)
-    interpreter.allocate_tensors()
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-    interpreter.set_tensor(input_details[0]['index'], input_data)
-    interpreter.set_tensor(input_details[1]['index'], axis)
-    interpreter.invoke()
-    tflite_output = interpreter.get_tensor(output_details[0]['index'])
-
-    # ONNX inference
-    sess = ort.InferenceSession(onnx_path)
-    onnx_output = sess.run(None, {"input": input_data})[0]
-
-    # Compare
-    print("TFLite Output:", tflite_output)
-    print("ONNX Output:  ", onnx_output)
-    print("Are outputs close? ->", np.allclose(tflite_output, onnx_output, atol=1e-5))
-
-# Run all
-if __name__ == "__main__":
-    tflite_path = create_tflite_model()
-    onnx_path = create_onnx_model()
-    compare_outputs(tflite_path, onnx_path)
