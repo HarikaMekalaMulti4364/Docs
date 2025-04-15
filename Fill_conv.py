@@ -46,3 +46,9 @@ def parse_FILL(parser):
         op_quant_params,
         value_tensor=value_reshaped  # Custom param in your parser to handle dynamic init value
     )
+
+
+
+ onnxruntime.capi.onnxruntime_pybind11_state.RuntimeException: [ONNXRuntimeError] : 6 : RUNTIME_EXCEPTION : Exception during initialization: /localdev/lucia/build_onnxruntime_1.19/onnxruntime/onnxruntime/core/providers/cpu/generato
+r/constant_of_shape_base.h:68 onnxruntime::ConstantOfShapeBase<EnabledOutputTypeList>::ConstantOfShapeBase(const onnxruntime::OpKernelInfo&) [with EnabledOutputTypeList = onnxruntime::TypeList<long int, onnxruntime::MLFloat16, float, doub
+le, signed char, short int, int, unsigned char, short unsigned int, unsigned int, long unsigned int, bool, onnxruntime::BFloat16>] t_proto_p->dims()[0] == 1 was false. Must have a single dimension of 1 
