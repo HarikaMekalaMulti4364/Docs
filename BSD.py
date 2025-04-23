@@ -18,6 +18,28 @@ HEAD is now at 3c5d9f10 Enable python_api compile tests
 
 
 
+Note: switching to 'ce89fd4e0e635f371b56380903b95dcfcdf518d7'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at ce89fd4e Merge branch 'main' into tf_quantized_passes
+\nThis repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting .git/hooks/post-checkout.\n
+error: could not detach HEAD
+
+
 
 
 
