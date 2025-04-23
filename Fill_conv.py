@@ -1,3 +1,112 @@
+import numpy as np
+import onnx
+from onnx import helper
+from onnx import TensorProto
+
+@Converter.Register("CustomTanh")
+def parse_CustomTanh(parser):
+    input_name = parser.get_tensor_name(parser.inputs[0])  # input tensor
+    output_name = parser.get_tensor_name(parser.outputs[0])  # output tensor
+    ip_quant_params = parser._get_input_quantization_params()
+    op_quant_params = parser._get_output_quantization_params()
+
+    # Define scalar values for 27 and 9 (constants in the formula)
+    scalar_27_value = 27.0
+    scalar_9_value = 9.0
+
+    # Create tensors for constants (27 and 9)
+    add_27_tensor = np.array([scalar_27_value], dtype=np.float32)
+    add_9_tensor = np.array([scalar_9_value], dtype=np.float32)
+
+    add_27_attr = helper.make_tensor(
+        name="add_27",  # name is required but arbitrary
+        data_type=TensorProto.FLOAT,
+        dims=[1],
+        vals=add_27_tensor
+    )
+
+    add_9_attr = helper.make_tensor(
+        name="add_9",  # name is required but arbitrary
+        data_type=TensorProto.FLOAT,
+        dims=[1],
+        vals=add_9_tensor
+    )
+
+    # Create ONNX operations
+    x_square = helper.make_node("Mul", [input_name, input_name], ["x_square"])
+    add_27_x_square = helper.make_node("Add", ["x_square", "add_27"], ["num"])
+    mul_x_num = helper.make_node("Mul", [input_name, "num"], ["num"])
+    add_27_9_x_square = helper.make_node("Add", ["x_square", "add_9"], ["denom"])
+    div_num_denom = helper.make_node("Div", ["num", "denom"], [output_name])
+
+    # Add operations to the graph
+    parser.add_onnx_operator(
+        "Constant",
+        [],  # no input tensors
+        ["add_27"],
+        {"value": add_27_attr},
+        ip_quant_params,
+        op_quant_params
+    )
+
+    parser.add_onnx_operator(
+        "Constant",
+        [],  # no input tensors
+        ["add_9"],
+        {"value": add_9_attr},
+        ip_quant_params,
+        op_quant_params
+    )
+
+    # Add Mul, Add, Div nodes to the graph
+    parser.add_onnx_operator(
+        "Mul",
+        [input_name, input_name],
+        ["x_square"],
+        {},
+        ip_quant_params,
+        op_quant_params
+    )
+
+    parser.add_onnx_operator(
+        "Add",
+        ["x_square", "add_27"],
+        ["num"],
+        {},
+        ip_quant_params,
+        op_quant_params
+    )
+
+    parser.add_onnx_operator(
+        "Mul",
+        [input_name, "num"],
+        ["num"],
+        {},
+        ip_quant_params,
+        op_quant_params
+    )
+
+    parser.add_onnx_operator(
+        "Add",
+        ["x_square", "add_9"],
+        ["denom"],
+        {},
+        ip_quant_params,
+        op_quant_params
+    )
+
+    parser.add_onnx_operator(
+        "Div",
+        ["num", "denom"],
+        [output_name],
+        {},
+        ip_quant_params,
+        op_quant_params
+    )
+
+
+
+
 def test_fill(self):
     import os
     import tensorflow as tf
