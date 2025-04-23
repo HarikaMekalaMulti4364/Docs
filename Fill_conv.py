@@ -2,46 +2,53 @@
 def parse_TANH(parser):
     input_name = parser.get_tensor_name(parser.inputs[0])
     output_name = parser.get_tensor_name(parser.outputs[0])
+
     ip_quant_params = parser._get_input_quantization_params()
     op_quant_params = parser._get_output_quantization_params()
 
+    # Determine ONNX dtype based on input type (int8, float32, etc.)
+    target_dtype = parser.inputs[0].Type()
+    onnx_dtype = Converter.tfl_dtype_to_onnx(target_dtype)
+
     # Step 1: abs(x)
-    abs_output = parser.get_temp_tensor_name()
+    abs_tensor_name = "tanh_abs"
     parser.add_onnx_operator(
         "Abs",
         [input_name],
-        [abs_output],
-        input_quantization_params=ip_quant_params,
-        output_quantization_params=ip_quant_params  # same as input
-    )
-
-    # Step 2: constant 1 tensor
-    one_tensor = np.array([1], dtype=np.float32)
-    one_const = helper.make_tensor(
-        name="const_one",
-        data_type=TensorProto.FLOAT,
-        dims=[1],
-        vals=one_tensor
-    )
-    const_name = parser.make_tensor("const_one_tensor", one_const)
-
-    add_output = parser.get_temp_tensor_name()
-    parser.add_onnx_operator(
-        "Add",
-        [abs_output, const_name],
-        [add_output],
+        [abs_tensor_name],
         input_quantization_params=ip_quant_params,
         output_quantization_params=ip_quant_params
     )
 
-    # Step 3: x / (1 + abs(x))
+    # Step 2: Create constant tensor with value 1 in correct dtype
+    one_tensor = np.array([1], dtype=onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[onnx_dtype])
+    one_const = helper.make_tensor(
+        name="const_one_tensor",
+        data_type=onnx_dtype,
+        dims=[1],
+        vals=one_tensor
+    )
+    const_one_name = parser.make_tensor("tanh_const_one_tensor", one_const)
+
+    # Step 3: Add → denom = 1 + abs(x)
+    denom_tensor_name = "tanh_denom"
+    parser.add_onnx_operator(
+        "Add",
+        [abs_tensor_name, const_one_name],
+        [denom_tensor_name],
+        input_quantization_params=ip_quant_params,
+        output_quantization_params=ip_quant_params
+    )
+
+    # Step 4: Div → output = x / (1 + |x|)
     parser.add_onnx_operator(
         "Div",
-        [input_name, add_output],
+        [input_name, denom_tensor_name],
         [output_name],
         input_quantization_params=ip_quant_params,
         output_quantization_params=op_quant_params
     )
+
 
 
 
