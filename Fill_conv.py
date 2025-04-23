@@ -5,43 +5,37 @@ def parse_TANH(parser):
     ip_quant_params = parser._get_input_quantization_params()
     op_quant_params = parser._get_output_quantization_params()
 
-    input_dtype = parser.get_tensor_dtype(input_name)
+    abs_output = parser.make_intermediate_tensor_name()
+    denom = parser.make_intermediate_tensor_name()
 
-    current_input = input_name
-
-    # Step 1: Cast int8 → float if needed
-    if input_dtype == TensorProto.INT8:
-        cast_to_float_output = parser.make_intermediate_tensor_name()
-        parser.add_onnx_operator(
-            "Cast",
-            [input_name],
-            [cast_to_float_output],
-            attrs={"to": TensorProto.FLOAT},
-            input_quantization_params=ip_quant_params,
-            output_quantization_params=None
-        )
-        current_input = cast_to_float_output
-
-    # Step 2: Apply Tanh
-    tanh_output = parser.make_intermediate_tensor_name() if input_dtype == TensorProto.INT8 else output_name
+    # Step 1: abs(x)
     parser.add_onnx_operator(
-        "Tanh",
-        [current_input],
-        [tanh_output],
-        input_quantization_params=None,
-        output_quantization_params=None
+        "Abs",
+        [input_name],
+        [abs_output],
+        input_quantization_params=ip_quant_params,
+        output_quantization_params=ip_quant_params  # reuse same scale
     )
 
-    # Step 3: Cast float → int8 if needed
-    if input_dtype == TensorProto.INT8:
-        parser.add_onnx_operator(
-            "Cast",
-            [tanh_output],
-            [output_name],
-            attrs={"to": TensorProto.INT8},
-            input_quantization_params=None,
-            output_quantization_params=op_quant_params
-        )
+    # Step 2: 1 + abs(x)
+    one_const = parser.make_constant_scalar("one_scalar", 1, dtype=parser.get_tensor_dtype(input_name))
+    parser.add_onnx_operator(
+        "Add",
+        [one_const, abs_output],
+        [denom],
+        input_quantization_params=ip_quant_params,
+        output_quantization_params=ip_quant_params
+    )
+
+    # Step 3: x / (1 + abs(x))
+    parser.add_onnx_operator(
+        "Div",
+        [input_name, denom],
+        [output_name],
+        input_quantization_params=ip_quant_params,
+        output_quantization_params=op_quant_params
+    )
+
 
 
 
