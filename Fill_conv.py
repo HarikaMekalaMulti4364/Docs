@@ -5,24 +5,31 @@ def parse_TANH(parser):
     ip_quant_params = parser._get_input_quantization_params()
     op_quant_params = parser._get_output_quantization_params()
 
-    abs_output = parser.make_intermediate_tensor_name()
-    denom = parser.make_intermediate_tensor_name()
-
     # Step 1: abs(x)
+    abs_output = parser.get_temp_tensor_name()
     parser.add_onnx_operator(
         "Abs",
         [input_name],
         [abs_output],
         input_quantization_params=ip_quant_params,
-        output_quantization_params=ip_quant_params  # reuse same scale
+        output_quantization_params=ip_quant_params  # same as input
     )
 
-    # Step 2: 1 + abs(x)
-    one_const = parser.make_constant_scalar("one_scalar", 1, dtype=parser.get_tensor_dtype(input_name))
+    # Step 2: constant 1 tensor
+    one_tensor = np.array([1], dtype=np.float32)
+    one_const = helper.make_tensor(
+        name="const_one",
+        data_type=TensorProto.FLOAT,
+        dims=[1],
+        vals=one_tensor
+    )
+    const_name = parser.make_tensor("const_one_tensor", one_const)
+
+    add_output = parser.get_temp_tensor_name()
     parser.add_onnx_operator(
         "Add",
-        [one_const, abs_output],
-        [denom],
+        [abs_output, const_name],
+        [add_output],
         input_quantization_params=ip_quant_params,
         output_quantization_params=ip_quant_params
     )
@@ -30,11 +37,12 @@ def parse_TANH(parser):
     # Step 3: x / (1 + abs(x))
     parser.add_onnx_operator(
         "Div",
-        [input_name, denom],
+        [input_name, add_output],
         [output_name],
         input_quantization_params=ip_quant_params,
         output_quantization_params=op_quant_params
     )
+
 
 
 
