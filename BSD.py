@@ -1,39 +1,29 @@
 import tensorflow as tf
 
-def custom_space_to_batch_nd(x, block_shape, paddings):
-    # x: (N, H, W, C), block_shape: [bH, bW], paddings: [[pad_top, pad_bottom], [pad_left, pad_right]]
-    pad_top, pad_bottom = paddings[0]
-    pad_left, pad_right = paddings[1]
-    x = tf.pad(x, [[0, 0], [pad_top, pad_bottom], [pad_left, pad_right], [0, 0]])
-    
-    N, H, W, C = tf.unstack(tf.shape(x))
-    bH, bW = block_shape
+def raw_space_to_depth(x, block_size):
+    # x: Tensor with shape (N, H, W, C)
+    input_shape = tf.shape(x)
+    N, H, W, C = input_shape[0], input_shape[1], input_shape[2], input_shape[3]
 
-    new_batch = N * bH * bW
-    out_height = H // bH
-    out_width = W // bW
+    # Step 1: reshape to [N, H//bs, bs, W//bs, bs, C]
+    reshaped = tf.raw_ops.Reshape(
+        tensor=x,
+        shape=tf.stack([N, H // block_size, block_size, W // block_size, block_size, C])
+    )
 
-    x = tf.reshape(x, [N, H // bH, bH, W // bW, bW, C])
-    x = tf.transpose(x, [2, 4, 0, 1, 3, 5])  # reorder dims
-    x = tf.reshape(x, [new_batch, out_height, out_width, C])
-    return x
+    # Step 2: transpose to [N, H//bs, W//bs, bs, bs, C]
+    transposed = tf.raw_ops.Transpose(
+        x=reshaped,
+        perm=[0, 1, 3, 2, 4, 5]
+    )
 
-# Example
-input_tensor = tf.random.uniform([1, 4, 4, 1], dtype=tf.float32)
-block_shape = [2, 2]
-paddings = [[0, 0], [0, 0]]
+    # Step 3: reshape to [N, H//bs, W//bs, C * bs * bs]
+    output = tf.raw_ops.Reshape(
+        tensor=transposed,
+        shape=tf.stack([N, H // block_size, W // block_size, C * block_size * block_size])
+    )
+    return output
 
-# TensorFlow's built-in
-tf_out = tf.space_to_batch_nd(input_tensor, block_shape, paddings)
-
-# Your custom
-custom_out = custom_space_to_batch_nd(input_tensor, block_shape, paddings)
-
-# Compare
-difference = tf.reduce_max(tf.abs(tf_out - custom_out))
-print("TF Output shape:", tf_out.shape)
-print("Custom Output shape:", custom_out.shape)
-print("Max difference:", difference.numpy())
 
 
 
