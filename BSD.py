@@ -1,43 +1,40 @@
+import tensorflow as tf
 
-You are in 'detached HEAD' state. You can look around, make experimental
-changes and commit them, and you can discard any commits you make in this
-state without impacting any branches by switching back to a branch.
+def custom_space_to_batch_nd(x, block_shape, paddings):
+    # x: (N, H, W, C), block_shape: [bH, bW], paddings: [[pad_top, pad_bottom], [pad_left, pad_right]]
+    pad_top, pad_bottom = paddings[0]
+    pad_left, pad_right = paddings[1]
+    x = tf.pad(x, [[0, 0], [pad_top, pad_bottom], [pad_left, pad_right], [0, 0]])
+    
+    N, H, W, C = tf.unstack(tf.shape(x))
+    bH, bW = block_shape
 
-If you want to create a new branch to retain commits you create, you may
-do so (now or later) by using -c with the switch command. Example:
+    new_batch = N * bH * bW
+    out_height = H // bH
+    out_width = W // bW
 
-  git switch -c <new-branch-name>
+    x = tf.reshape(x, [N, H // bH, bH, W // bW, bW, C])
+    x = tf.transpose(x, [2, 4, 0, 1, 3, 5])  # reorder dims
+    x = tf.reshape(x, [new_batch, out_height, out_width, C])
+    return x
 
-Or undo this operation with:
+# Example
+input_tensor = tf.random.uniform([1, 4, 4, 1], dtype=tf.float32)
+block_shape = [2, 2]
+paddings = [[0, 0], [0, 0]]
 
-  git switch -
+# TensorFlow's built-in
+tf_out = tf.space_to_batch_nd(input_tensor, block_shape, paddings)
 
-Turn off this advice by setting config variable advice.detachedHead to false
+# Your custom
+custom_out = custom_space_to_batch_nd(input_tensor, block_shape, paddings)
 
-HEAD is now at 3c5d9f10 Enable python_api compile tests
+# Compare
+difference = tf.reduce_max(tf.abs(tf_out - custom_out))
+print("TF Output shape:", tf_out.shape)
+print("Custom Output shape:", custom_out.shape)
+print("Max difference:", difference.numpy())
 
-
-
-Note: switching to 'ce89fd4e0e635f371b56380903b95dcfcdf518d7'.
-
-You are in 'detached HEAD' state. You can look around, make experimental
-changes and commit them, and you can discard any commits you make in this
-state without impacting any branches by switching back to a branch.
-
-If you want to create a new branch to retain commits you create, you may
-do so (now or later) by using -c with the switch command. Example:
-
-  git switch -c <new-branch-name>
-
-Or undo this operation with:
-
-  git switch -
-
-Turn off this advice by setting config variable advice.detachedHead to false
-
-HEAD is now at ce89fd4e Merge branch 'main' into tf_quantized_passes
-\nThis repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting .git/hooks/post-checkout.\n
-error: could not detach HEAD
 
 
 
