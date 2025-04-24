@@ -1,3 +1,28 @@
+# Create the constant tensor for 1 in the correct dtype
+one_tensor = np.array([1], dtype=onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[onnx_dtype])
+one_const_tensor = helper.make_tensor(
+    name="tanh_const_one",  # Arbitrary name
+    data_type=onnx_dtype,
+    dims=[1],
+    vals=one_tensor
+)
+
+const_one_name = "tanh_const_one_tensor"  # Choose a unique tensor name
+
+# Add Constant node via parser
+parser.add_onnx_operator(
+    "Constant",
+    [],
+    [const_one_name],
+    {"value": one_const_tensor},
+    ip_quant_params,
+    ip_quant_params
+)
+
+
+
+
+
 import tensorflow as tf
 
 def raw_space_to_batch_nd(x, block_shape, paddings):
