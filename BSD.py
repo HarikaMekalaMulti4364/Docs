@@ -1,3 +1,36 @@
+type
+SpaceToDepth
+module
+ai.onnx v13
+name
+PartitionedCall:0/SpaceToDepth_NCHW
+blocksize
+2
+type: int64
+input
+name: serving_default_x:0/NHWC_to_NCHW
+tensor: int8[1,3,224,224]
+output
+name: PartitionedCall:0/SpaceToDepth_NCHW
+tensor: int8[1,12,112,112]
+
+ onnxruntime.capi.onnxruntime_pybind11_state.NotImplemented: [ONNXRuntimeError] : 9 : NOT_IMPLEMENTED : Could
+not find an implementation for SpaceToDepth(13) node with name 'PartitionedCall:0/SpaceToDepth_NCHW'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Create the constant tensor for 1 in the correct dtype
 one_tensor = np.array([1], dtype=onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[onnx_dtype])
 one_const_tensor = helper.make_tensor(
