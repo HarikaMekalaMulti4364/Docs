@@ -24,7 +24,17 @@ not find an implementation for SpaceToDepth(13) node with name 'PartitionedCall:
 
 
 
-
+def parse_SHAPE(parser):
+    input_name = parser.get_tensor_name(parser.inputs[0])
+    output_name = parser.get_tensor_name(parser.outputs[0])
+    ip_quant_params = parser._get_input_quantization_params()
+    op_quant_params = parser._get_output_quantization_params()
+    output_i64 = output_name + "/i64"
+    parser.add_onnx_operator("Shape", [input_name], [output_i64], inputs_quant_params=ip_quant_params)
+    # tflite Shape outputs int32, onnx outputs int64
+    parser.add_onnx_operator("Cast", [output_i64], [output_name],
+        attr_dict={"to": TensorProto.INT32}, inputs_quant_params=ip_quant_params, outputs_quant_params=op_quant_params
+    )
 
 
 
