@@ -1,12 +1,3 @@
- axes_name = output_name + "/axes"
-    axes = np.array(squeeze_dims.tolist()).astype(
-        np.int64
-    )  # convert list to array; onnx only accepts int64
-    parser.add_ndarray_to_tensor_dict(axes_name, axes)
-    parser.add_onnx_operator("Squeeze", [input_name, axes_name], [output_name], {}, ip_quant_params, op_quant_params)
-
-
-
 
 
 def test_cumsum(self):
@@ -50,22 +41,21 @@ def parse_CUMSUM(parser):
     ip_quant_params = parser._get_input_quantization_params()
     op_quant_params = parser._get_output_quantization_params()
 
-    axis = 0  # Default axis=0 unless otherwise specified in your model
+    # Assume axis = 0 (default for Cumsum unless otherwise specified)
+    axis_value = 0
 
-    # Create axis constant tensor
-    axis_name = parser.create_intermediate_tensor_name()
-    parser.add_initializer(
-        axis_name,
-        TensorProto.INT32,
-        [],
-        [axis]
-    )
+    # Create a tensor for axis value
+    axes_name = output_name + "/axes"  # follow your naming style
+    axes = np.array([axis_value]).astype(np.int64)  # ONNX expects int64
 
+    parser.add_ndarray_to_tensor_dict(axes_name, axes)
+
+    # Add ONNX CumSum node
     parser.add_onnx_operator(
         "CumSum",
-        [input_name, axis_name],
+        [input_name, axes_name],  # input and axes as inputs
         [output_name],
-        {},
+        {},  # no attributes
         ip_quant_params,
         op_quant_params
     )
