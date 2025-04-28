@@ -1,4 +1,15 @@
-\def test_cumsum(self):
+ axes_name = output_name + "/axes"
+    axes = np.array(squeeze_dims.tolist()).astype(
+        np.int64
+    )  # convert list to array; onnx only accepts int64
+    parser.add_ndarray_to_tensor_dict(axes_name, axes)
+    parser.add_onnx_operator("Squeeze", [input_name, axes_name], [output_name], {}, ip_quant_params, op_quant_params)
+
+
+
+
+
+def test_cumsum(self):
     import os
     import tensorflow as tf
 
