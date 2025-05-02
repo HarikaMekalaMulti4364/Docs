@@ -53,38 +53,37 @@ def test_gelu(self):
 
 
 
+from math import ceil
+
 @staticmethod
-    def get_pads(
-            input_shape, strides, kernel_shape, padding=0, output_shape=None, dilation=None
-    ):
-        dilation = dilation if dilation else [1, 1]
-        kernel_h = dilation[0] * (kernel_shape[0] - 1) + 1
-        kernel_w = dilation[1] * (kernel_shape[1] - 1) + 1
-        stride_h = strides[0]
-        stride_w = strides[1]
-        data_format = b"NHWC"
-        pads = [0, 0, 0, 0]
-        # padding = 0 ("SAME"), padding=1("VALID")
-        if padding == 0:
-            input_height = input_shape[data_format.index(b"H")]
-            input_width = input_shape[data_format.index(b"W")]
-            if output_shape:
-                output_height = output_shape[1]
-                output_width = output_shape[2]
-            else:
-                output_height = ceil(float(input_height) / float(stride_h))
-                output_width = ceil(float(input_width) / float(stride_w))
-            pad_along_height = max(
-                (output_height - 1) * stride_h + kernel_h - input_height, 0
+def get_pads(input_shape, strides, kernel_shape, padding=0, output_shape=None, dilation=None):
+    rank = len(input_shape)
+    dilation = dilation if dilation else [1] * (rank - 2)
+    stride_dims = strides
+    kernel_dims = [
+        dilation[i] * (kernel_shape[i] - 1) + 1 for i in range(len(kernel_shape))
+    ]
+
+    # Default pads: [pad_before_dim1, pad_after_dim1, pad_before_dim2, ..., pad_after_dimN]
+    pads = [0] * (len(kernel_shape) * 2)
+
+    if padding == 0:  # "SAME" padding
+        spatial_dims = input_shape[1:-1]  # exclude batch and channels
+        if output_shape:
+            output_spatial_dims = output_shape[1:-1]
+        else:
+            output_spatial_dims = [
+                ceil(float(spatial_dims[i]) / float(stride_dims[i])) for i in range(len(spatial_dims))
+            ]
+
+        for i in range(len(spatial_dims)):
+            pad_along = max(
+                (output_spatial_dims[i] - 1) * stride_dims[i] + kernel_dims[i] - spatial_dims[i], 0
             )
-            pad_along_width = max(
-                (output_width - 1) * stride_w + kernel_w - input_width, 0
-            )
-            pads[0] = int(pad_along_height // 2)
-            pads[1] = int(pad_along_height - pads[0])
-            pads[2] = int(pad_along_width // 2)
-            pads[3] = int(pad_along_width - pads[2])
-        return pads
+            pads[2 * i] = pad_along // 2
+            pads[2 * i + 1] = pad_along - pads[2 * i]
+
+    return pads
 
 
 
