@@ -53,7 +53,38 @@ def test_gelu(self):
 
 
 
-
+@staticmethod
+    def get_pads(
+            input_shape, strides, kernel_shape, padding=0, output_shape=None, dilation=None
+    ):
+        dilation = dilation if dilation else [1, 1]
+        kernel_h = dilation[0] * (kernel_shape[0] - 1) + 1
+        kernel_w = dilation[1] * (kernel_shape[1] - 1) + 1
+        stride_h = strides[0]
+        stride_w = strides[1]
+        data_format = b"NHWC"
+        pads = [0, 0, 0, 0]
+        # padding = 0 ("SAME"), padding=1("VALID")
+        if padding == 0:
+            input_height = input_shape[data_format.index(b"H")]
+            input_width = input_shape[data_format.index(b"W")]
+            if output_shape:
+                output_height = output_shape[1]
+                output_width = output_shape[2]
+            else:
+                output_height = ceil(float(input_height) / float(stride_h))
+                output_width = ceil(float(input_width) / float(stride_w))
+            pad_along_height = max(
+                (output_height - 1) * stride_h + kernel_h - input_height, 0
+            )
+            pad_along_width = max(
+                (output_width - 1) * stride_w + kernel_w - input_width, 0
+            )
+            pads[0] = int(pad_along_height // 2)
+            pads[1] = int(pad_along_height - pads[0])
+            pads[2] = int(pad_along_width // 2)
+            pads[3] = int(pad_along_width - pads[2])
+        return pads
 
 
 
