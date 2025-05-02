@@ -1,3 +1,42 @@
+@Converter.Register("CONV_3D")
+def parse_CONV_3D(parser):
+    input_name = parser.get_tensor_name(parser.inputs[0])
+    output_name = parser.get_tensor_name(parser.outputs[0])
+    padding = parser.option.Padding()
+    input_shape = parser.inputs_shape[0]  # e.g., [1, D, H, W, C]
+    
+    strides = [
+        parser.option.StrideD(),
+        parser.option.StrideH(),
+        parser.option.StrideW()
+    ]
+    
+    dilation = [
+        parser.option.DilationDFactor(),
+        parser.option.DilationHFactor(),
+        parser.option.DilationWFactor()
+    ]
+    
+    weight_shape = parser.inputs_shape[1]  # usually [out_channels, kD, kH, kW, in_channels]
+    kernel_shape = weight_shape[1:4]  # [kD, kH, kW]
+
+    # Pads returned as [front, back, top, bottom, left, right]
+    pads = Parser.get_pads_3d(input_shape, strides, kernel_shape, padding, None, dilation)
+
+    # ONNX expects pads as: [front, top, left, back, bottom, right]
+    param_dict = dict(
+        dilations=dilation,
+        kernel_shape=kernel_shape,
+        pads=[pads[i] for i in [0, 2, 4, 1, 3, 5]],
+        strides=strides,
+    )
+
+    generate_Conv_to_ONNX(parser, input_name, output_name, param_dict)
+
+
+
+
+
 def test_Conv2D(self):
         out_dir = self.generate_out_dir()
         filename = os.path.join(out_dir, "conv2d.tflite")
