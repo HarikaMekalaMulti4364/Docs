@@ -1,3 +1,64 @@
+from onnx import helper
+
+@Converter.Register("GELU")
+def parse_GELU(parser):
+    input_name = parser.get_tensor_name(parser.inputs[0])
+    output_name = parser.get_tensor_name(parser.outputs[0])
+    ip_quant_params = parser._get_input_quantization_params()
+    op_quant_params = parser._get_output_quantization_params()
+
+    # Add ONNX Gelu operator
+    parser.add_onnx_operator(
+        "Gelu",
+        [input_name],
+        [output_name],
+        {"approximate": 0},  # Optional: 0 = exact, 1 = tanh approximation
+        ip_quant_params,
+        op_quant_params
+    )
+
+
+def test_gelu(self):
+    import os
+    import tensorflow as tf
+
+    out_dir = self.generate_out_dir()
+    filename = os.path.join(out_dir, "gelu.tflite")
+    convert_filename = os.path.join(out_dir, "gelu.onnx")
+
+    class CustomModel(tf.Module):
+        def __init__(self, name):
+            super().__init__(name=name)
+
+        @tf.function(input_signature=[
+            tf.TensorSpec(shape=[None], dtype=tf.float32),
+        ])
+        def __call__(self, x):
+            # Use tf.keras.activations.gelu (defaults to approximate=False)
+            y = tf.keras.activations.gelu(x)
+            return y
+
+    model = CustomModel("test_gelu")
+    self.convert_saved_model(model, filename)
+
+    is_pass, model_def, _, _ = tflite2mwnn(filename)
+    if not self.savespace:
+        import onnx
+        onnx.save(model_def, convert_filename)
+    self.assertTrue(is_pass)
+
+
+
+
+
+
+
+
+
+
+
+
+
 @Converter.Register("CONV_3D")
 def parse_CONV_3D(parser):
     input_name = parser.get_tensor_name(parser.inputs[0])
