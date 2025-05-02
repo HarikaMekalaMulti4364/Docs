@@ -13,6 +13,31 @@ def test_Conv2D(self):
         self.assertTrue(is_pass)
 
 
+@Converter.Register("CONV_2D")
+def parse_CONV_2D(parser):
+    input_name = parser.get_tensor_name(parser.inputs[0])
+    output_name = parser.get_tensor_name(parser.outputs[0])
+    padding = parser.option.Padding()
+    input_shape = parser.inputs_shape[0]
+    strides = [parser.option.StrideH(), parser.option.StrideW()]
+    dilation = [parser.option.DilationHFactor(), parser.option.DilationWFactor()]
+    weight_shape = parser.inputs_shape[1]
+    # tflite weight-order is OHWI
+    kernel_shape = weight_shape[1:3]
+
+    pads = Parser.get_pads(input_shape, strides, kernel_shape, padding, None, dilation)
+
+    # Setup convolution parameters: PADDINGS, DILATION, STRIDE, ...
+    # ONNX defines auto_pad:: NOTSET, SAME_UPPER, SAME_LOWER or VALID
+    # but we use pads::<list of ints> since the parser gets them calculated
+    param_dict = dict(
+        dilations=[parser.option.DilationHFactor(), parser.option.DilationWFactor()],
+        kernel_shape=kernel_shape,
+        pads=[pads[i] for i in [0, 2, 1, 3]],  # t, b, l, r -> t, l, b, r
+        strides=strides,
+    )
+    generate_Conv_to_ONNX(parser, input_name, output_name, param_dict)
+
 
 
 def test_cumsum(self):
