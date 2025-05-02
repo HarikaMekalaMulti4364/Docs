@@ -1,3 +1,18 @@
+def test_Conv2D(self):
+        out_dir = self.generate_out_dir()
+        filename = os.path.join(out_dir, "conv2d.tflite")
+        convert_filename = os.path.join(out_dir, "conv2d.onnx")
+        self.convert_sequential(
+            input_shape=(224, 224, 3),
+            test_layer=tf.keras.layers.Conv2D(filters=32, kernel_size=3),
+            filename=filename
+        )
+        is_pass, model_def, _, _ = tflite2mwnn(filename)
+        if not self.savespace:
+            onnx.save(model_def, convert_filename)
+        self.assertTrue(is_pass)
+
+
 
 
 def test_cumsum(self):
