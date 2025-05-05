@@ -229,3 +229,124 @@ def parse_CUMSUM(parser):
         ip_quant_params,
         op_quant_params
     )
+
+
+
+
+
+
+def add_ndarray_to_tensor_dict(self, name, ndarray):
+        if name in self.tensor_dict.keys():
+            value = self.tensor_dict[name]
+            print("\n name, value", name, value)
+            print("\n ndarray", ndarray)
+            # exit()
+            assert np.array_equal(
+                value, ndarray
+            ), "initializer {name} is shared but fails numpy.array_equal check"
+        self.tensor_dict[name] = ndarray
+
+@Converter.Register("RESIZE_NEAREST_NEIGHBOR")
+def parse_RESIZE_NEAREST_NEIGHBOR(parser):
+    input_name = parser.get_tensor_name(parser.inputs[0])
+    output_name = parser.get_tensor_name(parser.outputs[0])
+    # TFLite size only defines spatial dimensions
+    # But ONNX:Resize requires whole tensor ND-shape
+    # So we directly use infer_shapes
+    out_size = parser.outputs_shape[0]
+    scale = False  # only to test for using scale
+
+    size_name = parser.get_tensor_name(parser.inputs[1])
+    print("\n input0", parser.get_tensor_name(parser.inputs[0]))
+    print("\n input1", parser.get_tensor_name(parser.inputs[1]))
+    print("\n input1_shape", parser.inputs_shape[1])
+    print("\n output", parser.outputs_shape[0])
+    size_name = parser.get_tensor_name(parser.inputs[1])
+    if scale:
+        out_size = [m/n for m, n in zip(parser.outputs_shape[0], parser.inputs_shape[0])]
+        parser.add_ndarray_to_tensor_dict(size_name, np.array(out_size).astype(np.float32))
+    else:
+        parser.add_ndarray_to_tensor_dict(size_name, np.array(out_size).astype(np.int64))
+
+    align_corners = parser.option.AlignCorners()
+    half_pixel_centers = parser.option.HalfPixelCenters()
+
+    ip_quant_params = parser._get_input_quantization_params()
+    op_quant_params = parser._get_output_quantization_params()
+
+    _mode = "nearest"
+    if half_pixel_centers:
+        _cord_trans = "tf_half_pixel_for_nn"  # FIXME: Not found in latest ONNX doc (but existed in Opset 11)
+        node_attr = dict(coordinate_transformation_mode=_cord_trans, mode=_mode, nearest_mode="floor")
+    elif align_corners:
+        _cord_trans = "align_corners"
+        node_attr = dict(coordinate_transformation_mode=_cord_trans, mode=_mode)
+    else:
+        _cord_trans = "asymmetric"  # default coordinate_transformation_mode
+        node_attr = dict(coordinate_transformation_mode=_cord_trans, mode=_mode, nearest_mode="floor")
+
+    # parser.add_ndarray_to_tensor_dict("empt", np.array([]).astype(np.float32))
+    if scale:
+        parser.add_onnx_operator(
+            "Resize", [input_name, "", size_name], [output_name], node_attr, ip_quant_params, op_quant_params
+        )
+    else:
+        parser.add_onnx_operator(
+            "Resize", [input_name, "", "", size_name], [output_name], node_attr, ip_quant_params, op_quant_params
+        )
+
+
+error:
+
+input0 322
+
+ input1 2
+
+ input1_shape [2]
+
+ output [1, 128, 256, 32]
+
+ input0 324
+
+ input1 3
+
+ input1_shape [2]
+
+ output [1, 32, 64, 128]
+
+ input0 329
+
+ input1 2
+
+ input1_shape [2]
+
+ output [1, 128, 256, 64]
+
+ name, value 2 [  1 128 256  32]
+
+ ndarray [  1 128 256  64]
+Traceback (most recent call last):
+  File "/remote/us01sgnfs00562/NNSDK/harikam/har/nnac/frontend/nnac/deprecate_mwnnconvert", line 37, in <module>
+    transform_manager.model_transform(flags)
+  File "/remote/us01sgnfs00562/NNSDK/harikam/har/nnac/frontend/nnac/transform_manager.py", line 662, in model_transform
+    model, data_format, output_dir = model_passes.convert(flags)
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/remote/us01sgnfs00562/NNSDK/harikam/har/nnac/frontend/nnac/transform_manager.py", line 164, in convert
+    validate_pass, onnx_model, data_format, output_dir = converter(**vars(flags))
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/remote/us01sgnfs00562/NNSDK/harikam/har/nnac/frontend/nnac/converter/tflite2mwnn/tflite2mwnn_controller.py", line 93, in tflite2mwnn
+    converted_onnxs, auto_use_index_for_name = converter.gen_onnx_model(
+                                               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/remote/us01sgnfs00562/NNSDK/harikam/har/nnac/frontend/nnac/converter/tflite2mwnn/gen_converter.py", line 491, in gen_onnx_model
+    sub_name, auto_use_index_for_name = self.gen_onnx_model_one_subgraph(
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/remote/us01sgnfs00562/NNSDK/harikam/har/nnac/frontend/nnac/converter/tflite2mwnn/gen_converter.py", line 374, in gen_onnx_model_one_subgraph
+    Converter.parsers[op_name](parser)
+  File "/remote/us01sgnfs00562/NNSDK/harikam/har/nnac/frontend/nnac/converter/tflite2mwnn/gen_converter.py", line 2242, in parse_RESIZE_NEAREST_NEIGHBOR
+    parser.add_ndarray_to_tensor_dict(size_name, np.array(out_size).astype(np.int64))
+  File "/remote/us01sgnfs00562/NNSDK/harikam/har/nnac/frontend/nnac/converter/tflite2mwnn/gen_converter.py", line 921, in add_ndarray_to_tensor_dict
+    assert np.array_equal(
+           ^^^^^^^^^^^^^^^
+AssertionError: initializer {name} is shared but fails numpy.array_equal check
+
+
