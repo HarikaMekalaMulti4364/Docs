@@ -1,3 +1,90 @@
+
+
+
+onnxruntime.capi.onnxruntime_pybind11_state.Fail: [ONNXRuntimeError] : 1 : FAIL : Non-zero status code returned while running Conv node. Name:'77/Conv/float' Status Message: Input channels C is not equal to kernel channels * group. C: 128 kernel channels: 4 group: 1
+# Handle generation of ONNX:Conv for CONV_2D and DEPTHWISE_CONV_2D
+def generate_Conv_to_ONNX(parser, input_name, output_name, param_dict):
+    """Generates: PRED - NHWC2NCHW - Conv - NCHW2NHWC - SUCC
+    We need to read tflite tensor quant info, and use QDQ format if it's a quantized model.
+        If quant, all input_name and output_name can be supposed to be names of integer tensors.
+    """
+    perm_out = input_name + "/NHWC_to_NCHW"
+    ip_quant_params = parser._get_input_quantization_params()
+    # constant quantized tensors will be handled by other function
+    ip_quant_params = [ip_quant_params[0], None, None]
+    op_quant_params = parser._get_output_quantization_params()
+    parser.add_onnx_permute_layer(
+        input_name, perm_out, Parser.NHWC_TO_NCHW, ip_quant_params[0]
+    )
+    # Prepare Conv node
+    conv_in = perm_out
+    conv_out = output_name + "/Conv"
+    if "group" in param_dict:
+        # DEPTHWISE_CONV_2D, use kernel_order == [3, 0, 1, 2]
+        weight_name = parser.write_constant_tensor_to_initializer(
+            parser.inputs[1], kernel_order=[3, 0, 1, 2]
+        )
+    else:
+        weight_name = parser.write_constant_tensor_to_initializer(
+            parser.inputs[1], kernel_order=[0, 3, 1, 2]
+        )
+    bias_name = parser.write_constant_tensor_to_initializer(parser.inputs[2])
+    # floating Conv if quant_params are list of None; otherwise ->Dq->Conv->Q->
+    parser.add_onnx_operator(
+        "Conv",
+        [conv_in, weight_name, bias_name],
+        [conv_out],
+        param_dict,
+        ip_quant_params,
+        op_quant_params,
+    )
+    # Transpose back to TFLite:NHWC
+    # Note that the following Activation/Quantization is optional
+    generate_activation_transpose(
+        parser, conv_out, output_name, parser.activation_function, op_quant_params[0]
+    )
+
+@Converter.Register("CONV_2D")
+def parse_CONV_2D(parser):
+    input_name = parser.get_tensor_name(parser.inputs[0])
+    output_name = parser.get_tensor_name(parser.outputs[0])
+    padding = parser.option.Padding()
+    input_shape = parser.inputs_shape[0]
+    strides = [parser.option.StrideH(), parser.option.StrideW()]
+    dilation = [parser.option.DilationHFactor(), parser.option.DilationWFactor()]
+    weight_shape = parser.inputs_shape[1]
+    # tflite weight-order is OHWI
+    kernel_shape = weight_shape[1:3]
+
+    pads = Parser.get_pads(input_shape, strides, kernel_shape, padding, None, dilation)
+
+    # Setup convolution parameters: PADDINGS, DILATION, STRIDE, ...
+    # ONNX defines auto_pad:: NOTSET, SAME_UPPER, SAME_LOWER or VALID
+    # but we use pads::<list of ints> since the parser gets them calculated
+    param_dict = dict(
+        dilations=[parser.option.DilationHFactor(), parser.option.DilationWFactor()],
+        kernel_shape=kernel_shape,
+        pads=[pads[i] for i in [0, 2, 1, 3]],  # t, b, l, r -> t, l, b, r
+        strides=strides,
+    )
+    generate_Conv_to_ONNX(parser, input_name, output_name, param_dict)
+
+def test_Conv2D(self):
+        out_dir = self.generate_out_dir()
+        filename = os.path.join(out_dir, "conv2d.tflite")
+        convert_filename = os.path.join(out_dir, "conv2d.onnx")
+        self.convert_sequential(
+            input_shape=(224, 224, 3),
+            test_layer=tf.keras.layers.Conv2D(filters=32, kernel_size=3),
+            filename=filename
+        )
+        is_pass, model_def, _, _ = tflite2mwnn(filename)
+        if not self.savespace:
+            onnx.save(model_def, convert_filename)
+        self.assertTrue(is_pass)
+
+
+
 import flatbuffers
 import tflite
 
