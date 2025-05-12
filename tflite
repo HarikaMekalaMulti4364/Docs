@@ -182,3 +182,69 @@ def generate_Conv_to_ONNX(parser, input_name, output_name, param_dict):
     )
 
 
+# Handle generation of ONNX:Conv for CONV_2D and DEPTHWISE_CONV_2D
+def generate_Conv_to_ONNX(parser, input_name, output_name, param_dict):
+    """
+    Generates: NHWC -> NCHW -> Conv -> NCHW -> NHWC
+    Handles both standard and grouped/depthwise convolutions.
+    Applies QDQ format if quantized.
+    """
+    perm_out = input_name + "/NHWC_to_NCHW"
+    
+    # Quantization params
+    ip_quant_params = parser._get_input_quantization_params()
+    ip_quant_params = [ip_quant_params[0], None, None]
+    op_quant_params = parser._get_output_quantization_params()
+    
+    # Permute input from NHWC to NCHW
+    parser.add_onnx_permute_layer(
+        input_name, perm_out, Parser.NHWC_TO_NCHW, ip_quant_params[0]
+    )
+
+    # Get shapes
+    in_shape = parser.inputs_shape[0]      # [1, H, W, C]
+    weight_shape = parser.inputs_shape[1]  # [O, KH, KW, I]
+    out_shape = parser.outputs_shape[0]    # [1, H_out, W_out, C_out]
+
+    input_channels = in_shape[3]
+    output_channels = weight_shape[0]
+    kernel_h, kernel_w = weight_shape[1], weight_shape[2]
+    kernel_channels = weight_shape[3]
+
+    # Infer group count
+    group = 1
+    if input_channels != kernel_channels:
+        if input_channels % kernel_channels == 0:
+            group = input_channels // kernel_channels
+        elif kernel_channels % input_channels == 0:
+            group = kernel_channels // input_channels
+        else:
+            raise ValueError(f"Cannot infer valid group from input_channels={input_channels}, kernel_channels={kernel_channels}")
+
+    param_dict["group"] = group
+
+    # Select proper kernel order: OHWI → OIHW
+    weight_name = parser.write_constant_tensor_to_initializer(
+        parser.inputs[1], kernel_order=[0, 3, 1, 2]
+    )
+
+    # Bias
+    bias_name = parser.write_constant_tensor_to_initializer(parser.inputs[2])
+
+    # Create Conv node
+    conv_in = perm_out
+    conv_out = output_name + "/Conv"
+
+    parser.add_onnx_operator(
+        "Conv",
+        [conv_in, weight_name, bias_name],
+        [conv_out],
+        param_dict,
+        ip_quant_params,
+        op_quant_params,
+    )
+
+    # Transpose back to NHWC if needed
+    generate_activation_transpose(
+        parser, conv_out, output_name, parser.activation_function, op_quant_params[0]
+    )
