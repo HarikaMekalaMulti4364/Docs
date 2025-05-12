@@ -110,3 +110,75 @@ print(f"Output Tensor: {output_tensor.Name().decode('utf-8')}")
 
 # TODO: Reconstruct the model with only input (0) → output (39)
 
+
+
+
+# Handle generation of ONNX:Conv for CONV_2D and DEPTHWISE_CONV_2D
+def generate_Conv_to_ONNX(parser, input_name, output_name, param_dict):
+    """Generates: PRED - NHWC2NCHW - Conv - NCHW2NHWC - SUCC
+    We need to read tflite tensor quant info, and use QDQ format if it's a quantized model.
+        If quant, all input_name and output_name can be supposed to be names of integer tensors.
+    """
+    perm_out = input_name + "/NHWC_to_NCHW"
+    ip_quant_params = parser._get_input_quantization_params()
+    # constant quantized tensors will be handled by other function
+    ip_quant_params = [ip_quant_params[0], None, None]
+    op_quant_params = parser._get_output_quantization_params()
+    parser.add_onnx_permute_layer(
+        input_name, perm_out, Parser.NHWC_TO_NCHW, ip_quant_params[0]
+    )
+    # Prepare Conv node
+    conv_in = perm_out
+    conv_out = output_name + "/Conv"
+    if "group" in param_dict:
+        # print("\n 1256")
+        # exit()
+        # DEPTHWISE_CONV_2D, use kernel_order == [3, 0, 1, 2]
+        weight_name = parser.write_constant_tensor_to_initializer(
+            parser.inputs[1], kernel_order=[3, 0, 1, 2]
+        )
+    else:
+        print("\n *************************************************")
+        print("\n input_name", input_name)
+        print("\n output_name", output_name)
+        print(parser.inputs_shape[0])
+        print(parser.inputs_shape[1]) #0312, #0132
+        print(parser.inputs_shape[2])
+        print(parser.outputs_shape)
+        print(parser.inputs[1])
+        # [64, 7, 7, 3]
+        # [[1, 112, 112, 64]]
+        # exit()
+        if parser.inputs_shape[0][3]==parser.inputs_shape[1][3]:
+            if parser.inputs_shape[2][0] == parser.outputs_shape[0][3]:
+                weight_name = parser.write_constant_tensor_to_initializer(
+                    parser.inputs[1], kernel_order=[0, 3, 1, 2]
+                )
+                print("\n entered if")
+            else:
+                print("\n 1278 entered else")
+        elif parser.inputs_shape[0][3]==parser.inputs_shape[1][0]:
+            print("\n 1280 entered elif")
+            weight_name = parser.write_constant_tensor_to_initializer(
+                    parser.inputs[1], kernel_order=[0, 3, 1, 2]
+                )
+        else:
+            print("\n entered else")
+    # exit()
+    bias_name = parser.write_constant_tensor_to_initializer(parser.inputs[2])
+    # floating Conv if quant_params are list of None; otherwise ->Dq->Conv->Q->
+    parser.add_onnx_operator(
+        "Conv",
+        [conv_in, weight_name, bias_name],
+        [conv_out],
+        param_dict,
+        ip_quant_params,
+        op_quant_params,
+    )
+    # Transpose back to TFLite:NHWC
+    # Note that the following Activation/Quantization is optional
+    generate_activation_transpose(
+        parser, conv_out, output_name, parser.activation_function, op_quant_params[0]
+    )
+
+
