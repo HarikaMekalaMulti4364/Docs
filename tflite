@@ -1,3 +1,74 @@
+def generate_Conv_to_ONNX(parser, input_name, output_name, param_dict, is_depthwise=False):
+    """
+    Shared generator for Conv and DepthwiseConv
+    """
+    perm_out = input_name + "/NHWC_to_NCHW"
+
+    # Quantization
+    ip_quant_params = parser._get_input_quantization_params()
+    ip_quant_params = [ip_quant_params[0], None, None]
+    op_quant_params = parser._get_output_quantization_params()
+
+    # Permute input
+    parser.add_onnx_permute_layer(
+        input_name, perm_out, Parser.NHWC_TO_NCHW, ip_quant_params[0]
+    )
+
+    # Shapes
+    in_shape = parser.inputs_shape[0]      # [1, H, W, C]
+    weight_shape = parser.inputs_shape[1]  # [O, KH, KW, I]
+
+    input_channels = in_shape[3]
+    output_channels = weight_shape[0]
+    kernel_h, kernel_w = weight_shape[1], weight_shape[2]
+    kernel_channels = weight_shape[3]
+
+    # Infer group
+    if is_depthwise:
+        group = input_channels
+    else:
+        # Group inference logic for standard conv
+        group = 1
+        if input_channels != kernel_channels:
+            if input_channels % kernel_channels == 0:
+                group = input_channels // kernel_channels
+            elif kernel_channels % input_channels == 0:
+                group = kernel_channels // input_channels
+            else:
+                raise ValueError(f"Cannot infer valid group from input_channels={input_channels}, kernel_channels={kernel_channels}")
+    param_dict["group"] = group
+
+    # Write weights and bias
+    weight_name = parser.write_constant_tensor_to_initializer(
+        parser.inputs[1], kernel_order=[0, 3, 1, 2]
+    )
+    bias_name = parser.write_constant_tensor_to_initializer(parser.inputs[2])
+
+    # Create Conv
+    conv_in = perm_out
+    conv_out = output_name + "/Conv"
+    parser.add_onnx_operator(
+        "Conv",
+        [conv_in, weight_name, bias_name],
+        [conv_out],
+        param_dict,
+        ip_quant_params,
+        op_quant_params,
+    )
+
+    # Output permute
+    generate_activation_transpose(
+        parser, conv_out, output_name, parser.activation_function, op_quant_params[0]
+    )
+
+
+
+
+
+
+
+
+
 param_dict = dict(
     dilations=dilation,
     kernel_shape=kernel_shape,
