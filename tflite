@@ -456,3 +456,53 @@ def generate_Conv_to_ONNX(parser, input_name, output_name, param_dict):
 
 
  onnxruntime.capi.onnxruntime_pybind11_state.Fail: [ONNXRuntimeError] : 1 : FAIL : Non-zero status code returned while running Conv node. Name:'PartitionedCall:0/Conv' Status Message: Input channels C is not equal to kernel channels * group. C: 3 kernel channels: 3 group: 3
+
+
+
+@Converter.Register("DEPTHWISE_CONV_2D")
+def parse_DEPTHWISE_CONV_2D(parser):
+    input_name = parser.get_tensor_name(parser.inputs[0])
+    output_name = parser.get_tensor_name(parser.outputs[0])
+    
+    # Extract shape and options
+    input_shape = parser.inputs_shape[0]
+    padding = parser.option.Padding()
+    strides = [parser.option.StrideH(), parser.option.StrideW()]
+    dilation = [parser.option.DilationHFactor(), parser.option.DilationWFactor()]
+    
+    # Compute kernel shape and pads
+    weight = parser.get_constant_node(parser.inputs[1])
+    if weight.shape == (0,):
+        weight_name = parser.get_tensor_name(parser.inputs[1])
+        if weight_name in weight_bias_storage:
+            logger.debug("[DEBUG] Extract Weight from previous storage")
+            weight = weight_bias_storage[weight_name]
+        else:
+            logger.error("[ERROR] Weight %s is not constant!", weight_name)
+            sys.exit(-1)
+
+    kernel_shape = weight.shape[1:3]  # [KH, KW]
+    pads = Parser.get_pads(input_shape, strides, kernel_shape, padding, None, dilation)
+
+    # Optional: bias extraction & quant checks (kept for robustness)
+    bias = parser.get_constant_node(parser.inputs[2])
+    if bias.shape == (0,):
+        bias_name = parser.get_tensor_name(parser.inputs[2])
+        if bias_name in weight_bias_storage:
+            logger.debug("[DEBUG] Extract Bias from previous storage")
+            bias = weight_bias_storage[bias_name]
+        else:
+            logger.error("[ERROR] Bias %s is not constant!", bias_name)
+            sys.exit(-1)
+
+    # Prepare conv parameters
+    param_dict = dict(
+        dilations=dilation,
+        kernel_shape=kernel_shape,
+        pads=[pads[i] for i in [0, 2, 1, 3]],  # NHWC -> NCHW order: t,b,l,r -> t,l,b,r
+        strides=strides,
+        # No need to pass 'group', it will be inferred in generate_Conv_to_ONNX
+    )
+
+    # Call shared conv generator
+    generate_Conv_to_ONNX(parser, input_name, output_name, param_dict)
