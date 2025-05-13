@@ -1,3 +1,11 @@
+onnxruntime.capi.onnxruntime_pybind11_state.Fail: [ONNXRun[38/1906$
+] : 1 : FAIL : Non-zero status code returned while running Conv node. Name:'Par
+titionedCall:0/Conv' Status Message: Input channels C is not equal to kernel ch
+annels * group. C: 3 kernel channels: 3 group: 9 
+
+
+
+
 # weight shape before: (H, W, in_channels, depth_multiplier)
 # transpose to: (in_channels * depth_multiplier, 1, H, W)
 weight = weight.transpose(3, 2, 0, 1).reshape(-1, 1, weight.shape[0], weight.shape[1])
