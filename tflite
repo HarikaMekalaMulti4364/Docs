@@ -248,3 +248,111 @@ def generate_Conv_to_ONNX(parser, input_name, output_name, param_dict):
     generate_activation_transpose(
         parser, conv_out, output_name, parser.activation_function, op_quant_params[0]
     )
+
+
+@Converter.Register("DEPTHWISE_CONV_2D")
+def parse_DEPTHWISE_CONV_2D(parser):
+    input_name = parser.get_tensor_name(parser.inputs[0])
+    output_name = parser.get_tensor_name(parser.outputs[0])
+    padding = parser.option.Padding()
+    input_shape = parser.inputs_shape[0]
+    (
+        input_scale,
+        input_zero_point,
+        input_min,
+        input_max,
+    ) = parser.extract_quantization_info(parser.inputs[0])
+
+    strides = [parser.option.StrideH(), parser.option.StrideW()]
+    depth_multiplier = parser.option.DepthMultiplier()
+    dilation = [parser.option.DilationHFactor(), parser.option.DilationWFactor()]
+    weight = parser.get_constant_node(parser.inputs[1])
+    (
+        weight_scale,
+        weight_zero_point,
+        weight_min,
+        weight_max,
+    ) = parser.extract_quantization_info(parser.inputs[1])
+    if weight.shape == (0,):
+        weight_name = parser.get_tensor_name(parser.inputs[1])
+        if weight_name in weight_bias_storage.keys():
+            logger.debug("[DEBUG] Extract Weight from previous storage")
+            weight = weight_bias_storage[weight_name]
+        else:
+            logger.error(
+                "[ERROR] Weight %s is not constant!", weight_name
+            )
+            sys.exit(-1)
+    weight = weight.transpose([3, 0, 1, 2])
+
+    kernel_shape = weight.shape[2:4]
+    bias = parser.get_constant_node(parser.inputs[2])
+    bias_scale, bias_zero_point, bias_min, bias_max = parser.extract_quantization_info(
+        parser.inputs[2]
+    )
+    if bias.shape == (0,):
+        bias_name = parser.get_tensor_name(parser.inputs[2])
+        if bias_name in weight_bias_storage.keys():
+            logger.debug("[DEBUG] Extract Bias from previous storage")
+            bias = weight_bias_storage[bias_name]
+        else:
+            logger.error(
+                "[ERROR] Bias %s is not constant!", bias_name
+            )
+            sys.exit(-1)
+
+    pads = Parser.get_pads(input_shape, strides, kernel_shape, padding, None, dilation)
+    if not isinstance(weight_scale, np.ndarray):
+        if weight_scale != 0:
+            verify_diff = input_scale * weight_scale - bias_scale
+            if np.abs(verify_diff) > 2e-3 or bias_zero_point != 0:
+                logger.error(
+                    "[ERROR] verify (input * weight - bias) scale diff: {}".format(
+                        verify_diff
+                    )
+                )
+                logger.error("[ERROR] bias zero_point: {}".format(bias_zero_point))
+                logger.error(
+                    "[ERROR] Bias quantization might be wrong! Please recheck the data!"
+                )
+                sys.exit(-1)
+    else:  # per channel weights scale and zero_point store in ONNX model
+        verify_diff = input_scale * weight_scale - bias_scale
+        if np.max(np.abs(verify_diff)) > 2e-3 or np.any(bias_zero_point != 0):
+            logger.error(
+                "[ERROR] verify input_scale * weight_scale - bias_scale diff: {}".format(
+                    verify_diff
+                )
+            )
+            logger.error("[ERROR] bias zero_point: {}".format(bias_zero_point))
+            logger.error(
+                "[ERROR] Bias quantization might be wrong! Please recheck the data!"
+            )
+            sys.exit(-1)
+
+    output_scale, output_zero_point, _, _ = parser.extract_quantization_info(
+        parser.outputs[0]
+    )
+    if output_scale != 0:
+        output_data_type = parser.outputs[0].Type()
+        if output_data_type == 3:
+            pass  # parser.layer.convolution_param.saturate = 4 # unsigned 8bit
+        elif output_data_type == 9:
+            pass  # parser.layer.convolution_param.saturate = 3  # signed 8bit
+        else:
+            logger.warning(
+                "[WARNING] Possible unsuppoprted data type! No saturate inserted."
+            )
+
+    # Setup convolution parameters: PADDINGS, DILATION, STRIDE, ...
+    # ONNX defines auto_pad:: NOTSET, SAME_UPPER, SAME_LOWER or VALID
+    # but we use pads::<list of ints> since the parser gets them calculated
+    param_dict = dict(
+        dilations=[parser.option.DilationHFactor(), parser.option.DilationWFactor()],
+        kernel_shape=kernel_shape,
+        pads=[pads[i] for i in [0, 2, 1, 3]],  # t, b, l, r -> t, l, b, r
+        strides=strides,
+        group=weight.shape[0] // depth_multiplier,
+    )
+    generate_Conv_to_ONNX(parser, input_name, output_name, param_dict)
+
