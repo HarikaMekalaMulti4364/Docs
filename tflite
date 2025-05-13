@@ -423,3 +423,6 @@ def generate_Conv_to_ONNX(parser, input_name, output_name, param_dict):
     generate_activation_transpose(
         parser, conv_out, output_name, parser.activation_function, op_quant_params[0]
     )
+
+
+ onnxruntime.capi.onnxruntime_pybind11_state.Fail: [ONNXRuntimeError] : 1 : FAIL : Non-zero status code returned while running Conv node. Name:'PartitionedCall:0/Conv' Status Message: Input channels C is not equal to kernel channels * group. C: 3 kernel channels: 3 group: 3
