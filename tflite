@@ -1,3 +1,75 @@
+def generate_Conv_to_ONNX(parser, input_name, output_name, param_dict, is_depthwise=False):
+    """
+    Unified ONNX Conv generator for both CONV_2D and DEPTHWISE_CONV_2D.
+    Adds necessary transposes (NHWC <-> NCHW), handles quantization,
+    and configures Conv parameters including group for depthwise.
+
+    Sequence:
+        NHWC -> NCHW -> Conv -> NCHW -> NHWC
+    """
+    # Step 1: NHWC -> NCHW
+    perm_out = input_name + "/NHWC_to_NCHW"
+    ip_quant_params = parser._get_input_quantization_params()
+    ip_quant_params = [ip_quant_params[0], None, None]  # only first input is quantized
+    op_quant_params = parser._get_output_quantization_params()
+
+    parser.add_onnx_permute_layer(
+        input_name, perm_out, Parser.NHWC_TO_NCHW, ip_quant_params[0]
+    )
+
+    # Step 2: Get input shape info
+    in_shape = parser.inputs_shape[0]      # [1, H, W, C]
+    weight_shape = parser.inputs_shape[1]  # [O, KH, KW, I]
+    input_channels = in_shape[3]
+
+    # Step 3: Determine kernel layout and group
+    if is_depthwise:
+        # DEPTHWISE_CONV_2D
+        kernel_order = [3, 0, 1, 2]  # [H, W, in_c, channel_multiplier] -> [out_c, 1, H, W]
+        group = input_channels
+    else:
+        # Standard CONV_2D
+        kernel_order = [0, 3, 1, 2]  # [O, H, W, I] -> [O, I, H, W]
+        group = 1
+
+    param_dict["group"] = group
+
+    # Step 4: Write weights and biases
+    weight_name = parser.write_constant_tensor_to_initializer(
+        parser.inputs[1], kernel_order=kernel_order
+    )
+    bias_name = parser.write_constant_tensor_to_initializer(parser.inputs[2])
+
+    # Step 5: Add Conv op
+    conv_in = perm_out
+    conv_out = output_name + "/Conv"
+    parser.add_onnx_operator(
+        "Conv",
+        [conv_in, weight_name, bias_name],
+        [conv_out],
+        param_dict,
+        ip_quant_params,
+        op_quant_params,
+    )
+
+    # Step 6: NCHW -> NHWC + activation
+    generate_activation_transpose(
+        parser, conv_out, output_name, parser.activation_function, op_quant_params[0]
+    )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Handle generation of ONNX:Conv for CONV_2D and DEPTHWISE_CONV_2D
 def generate_Conv_to_ONNX(parser, input_name, output_name, param_dict):
     """Generates: PRED - NHWC2NCHW - Conv - NCHW2NHWC - SUCC
