@@ -1,3 +1,20 @@
+param_dict = dict(
+    dilations=dilation,
+    kernel_shape=kernel_shape,
+    pads=[pads[i] for i in [0, 2, 1, 3]],  # t, b, l, r -> t, l, b, r
+    strides=strides,
+    group=group,
+)
+
+in_channels = input_shape[-1]
+depth_multiplier = parser.option.DepthMultiplier()
+group = in_channels  # For depthwise conv, group = in_channels
+
+# Transform weight from (H, W, in_channels, depth_multiplier)
+# to ONNX format: (C_out, 1, H, W)
+weight = weight.transpose(3, 2, 0, 1).reshape(in_channels * depth_multiplier, 1, weight.shape[0], weight.shape[1])
+
+
 onnxruntime.capi.onnxruntime_pybind11_state.Fail: [ONNXRun[38/1906$
 ] : 1 : FAIL : Non-zero status code returned while running Conv node. Name:'Par
 titionedCall:0/Conv' Status Message: Input channels C is not equal to kernel ch
