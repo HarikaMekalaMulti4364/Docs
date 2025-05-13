@@ -1,3 +1,8 @@
+# weight shape before: (H, W, in_channels, depth_multiplier)
+# transpose to: (in_channels * depth_multiplier, 1, H, W)
+weight = weight.transpose(3, 2, 0, 1).reshape(-1, 1, weight.shape[0], weight.shape[1])
+
+generate_Conv_to_ONNX(parser, input_name, output_name, param_dict, weight, bias)
 
 
 
