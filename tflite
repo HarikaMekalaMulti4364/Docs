@@ -1,3 +1,16 @@
+results = []
+    for score, bbox, label in zip(scores.squeeze(), boxes.squeeze(), labels.squeeze()):
+        xmin, ymin, xmax, ymax = bbox
+        entry = {
+            "category_id": coco_ids[int(label)],
+            "score": float(score),
+            "bbox": [xmin / IM_WIDTH, ymin / IM_HEIGHT, (xmax - xmin) / IM_WIDTH, (ymax - ymin) / IM_HEIGHT],
+        }
+        results.append(entry)
+    return results
+
+
+
 def generate_Conv_to_ONNX(parser, input_name, output_name, param_dict, is_depthwise=False):
     """
     Unified ONNX Conv generator for both CONV_2D and DEPTHWISE_CONV_2D.
