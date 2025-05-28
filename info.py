@@ -1,3 +1,56 @@
+postprocess without letterbox
+
+def unletterbox_boxes(boxes, input_shape, original_shape):
+    """
+    Reverses letterboxing to map boxes from letterboxed image space to original image space.
+    `boxes`: Tensor[N, 4] in xyxy format
+    `input_shape`: (h, w) after letterboxing, e.g., (640, 640)
+    `original_shape`: (h, w) of original image before resize
+    """
+    ih, iw = input_shape
+    oh, ow = original_shape
+
+    # Determine scale and padding
+    scale = min(iw / ow, ih / oh)
+    pad_w = (iw - ow * scale) / 2
+    pad_h = (ih - oh * scale) / 2
+
+    # Adjust boxes
+    boxes = boxes.clone()
+    boxes[:, [0, 2]] -= pad_w  # x padding
+    boxes[:, [1, 3]] -= pad_h  # y padding
+    boxes /= scale
+
+    # Clip to original image dimensions
+    boxes[:, 0].clamp_(0, ow)
+    boxes[:, 1].clamp_(0, oh)
+    boxes[:, 2].clamp_(0, ow)
+    boxes[:, 3].clamp_(0, oh)
+    return boxes
+
+
+if out:
+    bboxes, scores, labels = out
+    bboxes = unletterbox_boxes(bboxes, (640, 640), input_shape)  # <-- fix here
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 preprocess with letterbox
 # Copyright 2023 Synopsys, Inc.
 # This Synopsys software and all associated documentation are proprietary
