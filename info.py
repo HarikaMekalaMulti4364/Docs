@@ -1,3 +1,12 @@
+coco_predictions = coco_ground_truth.loadRes(predictions)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  pycocotools/coco.py", line 329, in loadRes
+    if 'caption' in anns[0]:
+                    ~~~~^^^
+IndexError: list index out of range
+
+
+
 postprocess without letterbox
 
 def unletterbox_boxes(boxes, input_shape, original_shape):
