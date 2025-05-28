@@ -67,6 +67,49 @@ def preprocess(image):
 
 
 
+preprocess without letterbox
+# Copyright 2023 Synopsys, Inc.
+# This Synopsys software and all associated documentation are proprietary
+# to Synopsys, Inc. and may only be used pursuant to the terms and conditions
+# of a written license agreement with Synopsys, Inc.
+# All other use, reproduction, modification, or distribution of the Synopsys
+# software or the associated documentation is strictly prohibited.
+
+from pathlib import Path
+import cv2
+
+def GetDataLoader(dataset, max_input=None, **kwargs):
+    extensions = [".jpg", ".jpeg", ".png"]
+    path_to_all_files = sorted(Path(dataset).glob("*"))
+    paths_to_images = [image_path for image_path in path_to_all_files if image_path.suffix.lower() in extensions]
+    for image_path in paths_to_images[:max_input]:
+        img = cv2.imread(str(image_path))
+        # img = cv2.cvtColor(img)
+        img = preprocess(img)
+       
+        yield img#.astype(float32)
+
+
+def preprocess(image):
+
+    # Need further adjustment for quantization and accuracy test
+
+    h, w, c = image.shape
+
+    h_in = 640
+    w_in = 640
+
+    image = cv2.resize(image, [h_in, w_in], interpolation = cv2.INTER_LINEAR)
+    img_data = image.transpose(2, 0, 1)
+
+    img_data = img_data.reshape(1, 3, h_in, w_in)
+    
+    img_data = img_data.astype('float32')
+    
+    return img_data
+
+
+
 
 postprocess without letterbox
 # Copyright 2023 Synopsys, Inc.
