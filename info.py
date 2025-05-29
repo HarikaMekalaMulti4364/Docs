@@ -1,3 +1,84 @@
+import cv2
+import numpy as np
+import math
+from pathlib import Path
+from typing import Tuple
+
+
+def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=False, scale_fill=False, scaleup=True, stride=32):
+    shape = im.shape[:2]  # current shape [height, width]
+    if isinstance(new_shape, int):
+        new_shape = (new_shape, new_shape)
+
+    # Scale ratio (new / old)
+    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+    if not scaleup:
+        r = min(r, 1.0)
+
+    # Compute padding
+    ratio = r, r
+    new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
+    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]
+
+    if auto:
+        dw, dh = np.mod(dw, stride), np.mod(dh, stride)
+    elif scale_fill:
+        dw, dh = 0.0, 0.0
+        new_unpad = (new_shape[1], new_shape[0])
+        ratio = new_shape[1] / shape[1], new_shape[0] / shape[0]
+
+    dw /= 2
+    dh /= 2
+
+    if shape[::-1] != new_unpad:
+        im = cv2.resize(im, new_unpad, interpolation=cv2.INTER_LINEAR)
+
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+
+    im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
+    return im, ratio, (dw, dh)
+
+
+def load_image(img_path, img_size):
+    im = cv2.imread(str(img_path))
+    h0, w0 = im.shape[:2]
+    r = img_size / max(h0, w0)
+    if r != 1:
+        interp = cv2.INTER_LINEAR
+        im = cv2.resize(im, (math.ceil(w0 * r), math.ceil(h0 * r)), interpolation=interp)
+    return im, (h0, w0)
+
+
+def preprocess(image):
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image = image.astype(np.float32) / 255.0
+    image = image.transpose(2, 0, 1)  # HWC to CHW
+    image = np.expand_dims(image, axis=0)  # Add batch dimension
+    return image
+
+
+def GetDataLoader(dataset, max_input=None, img_size=640, **kwargs):
+    extensions = [".jpg", ".jpeg", ".png"]
+    path_to_all_files = sorted(Path(dataset).glob("*"))
+    paths_to_images = [p for p in path_to_all_files if p.suffix.lower() in extensions]
+
+    for image_path in paths_to_images[:max_input]:
+        img, (h0, w0) = load_image(image_path, img_size)
+        img, _, _ = letterbox(img, new_shape=(img_size, img_size), auto=False, scale_fill=False, scaleup=False)
+        img = preprocess(img)
+        yield img, [h0, w0]
+
+
+
+
+
+
+
+
+
+
+
 from typing import List, Dict, Tuple
 import torch
 import numpy as np
