@@ -1,3 +1,5 @@
+docker run -it --rm --gpus all --name yolov8_ul --shm-size=1g -v /DATA2/harikam/ultralytics:/workspace/ultralytics/ -v /synology/data/datasets/coco:/workspace/ultralytics/ultralytics/datasets/coco nm-image2
+
 WARNING ⚠️ user config directory '/root/.config/Ultralytics' is not writeable, defaulting to '/tmp' or CWD.Alternatively you can define a YOLO_CONFIG_DIR environment variable for this path.
 Creating new Ultralytics Settings v0.0.6 file ✅ 
 View Ultralytics Settings with 'yolo settings' or at '/tmp/Ultralytics/settings.json'
