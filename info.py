@@ -1,3 +1,14 @@
+WARNING ⚠️ user config directory '/root/.config/Ultralytics' is not writeable, defaulting to '/tmp' or CWD.Alternatively you can define a YOLO_CONFIG_DIR environment variable for this path.
+Creating new Ultralytics Settings v0.0.6 file ✅ 
+View Ultralytics Settings with 'yolo settings' or at '/tmp/Ultralytics/settings.json'
+Update Settings with 'yolo settings key=value', i.e. 'yolo settings runs_dir=path/to/dir'. For help see https://docs.ultralytics.com/quickstart/#ultralytics-settings.
+
+
+
+
+
+
+
 coco_predictions = coco_ground_truth.loadRes(predictions)
                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   pycocotools/coco.py", line 329, in loadRes
