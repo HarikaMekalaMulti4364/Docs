@@ -1,3 +1,82 @@
+from typing import List, Dict, Tuple
+import torch
+import numpy as np
+from mmcv.ops.nms import batched_nms
+from nnac.accuracy.datasets.coco import coco_ids
+
+def postprocess(nn_output: List, input_shape: Tuple[int, int]) -> List[Dict]:
+    """
+    Postprocess function for YOLOv8-style output (1, 84, 8400).
+
+    Args:
+        nn_output (List): Model output as a list with shape [1, 84, 8400]
+        input_shape (Tuple[int, int]): Input shape (H, W)
+
+    Returns:
+        List[Dict]: List of detections in COCO format.
+    """
+    output = torch.from_numpy(np.array(nn_output))  # (1, 84, 8400)
+    output = output.squeeze(0).permute(1, 0)         # (8400, 84)
+
+    boxes = output[:, 0:4]
+    objectness = output[:, 4:5]
+    class_scores = output[:, 5:]  # shape: (8400, 80)
+
+    # Final confidence = objectness * class_conf
+    scores = objectness * class_scores
+    max_scores, labels = torch.max(scores, dim=1)
+    mask = max_scores > 0.01
+
+    boxes = boxes[mask]
+    scores = max_scores[mask]
+    labels = labels[mask]
+
+    if boxes.numel() == 0:
+        return []
+
+    # cx, cy, w, h -> x1, y1, x2, y2
+    cx, cy, w, h = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+    x1 = cx - w / 2
+    y1 = cy - h / 2
+    x2 = cx + w / 2
+    y2 = cy + h / 2
+    boxes = torch.stack([x1, y1, x2, y2], dim=1)
+
+    # Apply NMS
+    det_bboxes, keep = batched_nms(boxes, scores, labels, iou_threshold=0.65)
+    boxes = boxes[keep]
+    scores = scores[keep]
+    labels = labels[keep]
+
+    H, W = input_shape
+    results = []
+    for box, score, label in zip(boxes, scores, labels):
+        x1, y1, x2, y2 = box.tolist()
+        result = {
+            "category_id": coco_ids[int(label)],
+            "score": float(score),
+            "bbox": [
+                x1 / W,
+                y1 / H,
+                (x2 - x1) / W,
+                (y2 - y1) / H,
+            ],
+        }
+        results.append(result)
+
+    return results
+
+
+
+
+
+
+
+
+
+
+
+
 import cv2
 import numpy as np
 import math
