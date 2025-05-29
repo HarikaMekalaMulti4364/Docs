@@ -1,3 +1,7 @@
+mkdir -p /DATA2/harikam/ultralytics/.ultralytics
+echo '{}' > /DATA2/harikam/ultralytics/.ultralytics/settings.json
+
+
 docker run -it --rm --gpus all \
   --name yolov8_ul \
   --shm-size=1g \
