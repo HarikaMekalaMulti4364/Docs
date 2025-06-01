@@ -1,3 +1,159 @@
+# Copyright 2023 Synopsys, Inc.
+# This Synopsys software and all associated documentation are proprietary
+# to Synopsys, Inc. and may only be used pursuant to the terms and conditions
+# of a written license agreement with Synopsys, Inc.
+# All other use, reproduction, modification, or distribution of the Synopsys
+# software or the associated documentation is strictly prohibited.
+
+from pathlib import Path
+import numpy as np
+import cv2
+import math
+
+
+def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
+    """Resizes and pads image to new_shape with stride-multiple constraints, returns resized image, ratio, padding."""
+    shape = img.shape[:2]  # current shape (h, w)
+    r = min(new_shape[0] / shape[1], new_shape[1] / shape[0])  # scale ratio (new_w/old_w, new_h/old_h)
+    new_unpad = (int(round(shape[1] * r)), int(round(shape[0] * r)))
+    dw, dh = new_shape[0] - new_unpad[0], new_shape[1] - new_unpad[1]  # padding
+
+    dw /= 2  # divide padding into 2 sides
+    dh /= 2
+
+    img = cv2.resize(img,(640, 640), interpolation=cv2.INTER_LINEAR)
+    print(img.shape)
+    exit()
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
+    return img
+
+
+def load_image(img_path, img_size):
+    """
+    Loads an image by index, returning the image, its original dimensions, and resized dimensions.
+
+    Returns (im, original hw, resized hw)
+    """ #0.73
+    im = cv2.imread(str(img_path))
+    h0, w0 = im.shape[:2]
+    r = img_size / max(h0, w0)
+    if r != 1:
+        interp = cv2.INTER_LINEAR
+        im = cv2.resize(im, (math.ceil(w0 * r), math.ceil(h0 * r)), interpolation=interp)
+    return im, (h0, w0)
+
+
+
+def GetDataLoader(dataset, max_input=None, **kwargs):
+    extensions = [".jpg", ".jpeg", ".png"]
+    path_to_all_files = sorted(Path(dataset).glob("*"))
+    paths_to_images = [image_path for image_path in path_to_all_files if image_path.suffix.lower() in extensions]
+    for image_path in paths_to_images[:max_input]:
+        image_path = "/slowfs/us01dwt2p479/evaccuracy/datasets/COCO2017/val2017/000000397133.jpg"
+        img = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+        print("\n img shape", img.shape)
+        print("\n img", img)
+        h,w = img.shape[:2]
+        # old_size = (w, h)
+        scale = (640,640)
+        max_long_edge, max_short_edge = max(scale), min(scale)
+        scale_factor = min(max_long_edge / max(h, w),
+                           max_short_edge / min(h, w))
+        if isinstance(scale_factor, (float, int)):
+            scale_factor = (scale_factor, scale_factor)  
+        print("\n scale_factor", scale_factor)
+        print("\n w,h",w,h)
+        print("\n scale_factor values", scale_factor[0], scale_factor[1])
+        new_size = int(w * float(scale_factor[0]) + 0.5), int(h * float(scale_factor[1]) + 0.5)
+        print("\n new size", new_size)
+        print("\n img", img)
+        out = None
+        interpolation = "bilinear"
+        resized_img = cv2.resize(
+            img, new_size, dst=out, interpolation=cv2.INTER_LINEAR)
+        print("\n resized img", resized_img)
+        print("\n resized img shape", resized_img.shape)
+        new_h, new_w = img.shape[:2]
+        w_scale = new_w/w
+        h_scale = new_h/h
+        pad_val = (114.0, 114.0, 114.0)
+        max_size = max(img.shape[:2])
+        shape = (640, 640)
+        padding_mode = "constant" #cv2.BORDER_CONSTANT
+        if shape is not None:
+            width = max(shape[1] - img.shape[1], 0)
+            height = max(shape[0] - img.shape[0], 0)
+            padding = (0, 0, width, height)
+        if isinstance(padding, tuple) and len(padding) in [2, 4]:
+            print("\n 582")
+            if len(padding) == 2:
+                padding = (padding[0], padding[1], padding[0], padding[1])
+                print("\n 585 padding", padding)
+        elif isinstance(padding, numbers.Number):
+            padding = (padding, padding, padding, padding)
+            print("\n 588 padding", padding)
+        img = cv2.copyMakeBorder(
+            img,
+            padding[1],
+            padding[3],
+            padding[0],
+            padding[2],
+            cv2.BORDER_CONSTANT,
+            value=pad_val)
+        # print("\n padded -mg", img)
+        # print("\n final padded image shape", img.shape)
+        # exit()
+        # img, (h0, w0) = load_image(image_path, 640)
+        # print("\n img", img.shape)
+        # print("\n img", img)
+        # exit()
+        # img = letterbox(img, auto=False, scaleup=False)
+        # img = preprocess(img)
+        img = img[np.newaxis, ...].astype(np.float32)
+        img = img.transpose(0, 3, 1, 2)
+        yield img, [h, w]
+
+
+def preprocess(image):
+    preprocessed_img = image#cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    preprocessed_img = preprocessed_img[np.newaxis, ...].astype(np.float32)# / 255.
+    preprocessed_img = preprocessed_img.transpose(0, 3, 1, 2)
+    return preprocessed_img
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import cv2
 import numpy as np
 import math
