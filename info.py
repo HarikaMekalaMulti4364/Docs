@@ -1,3 +1,179 @@
+import numpy as np
+import torch
+from typing import List, Dict
+from mmcv.ops.nms import batched_nms
+from nnac.accuracy.datasets.coco import coco_ids
+
+
+def bbox_cxcywh_to_xyxy(bbox: np.ndarray) -> np.ndarray:
+    "Convert bbox coordinates from (cx, cy, w, h) to (x1, y1, x2, y2)."
+    cx, cy, w, h = np.split(bbox, 4, axis=-1)
+    cx, cy, w, h = cx.squeeze(-1), cy.squeeze(-1), w.squeeze(-1), h.squeeze(-1)
+    bbox_new = np.stack([(cx - 0.5 * w), (cy - 0.5 * h), (cx + 0.5 * w), (cy + 0.5 * h)], axis=-1)
+    return bbox_new
+
+
+def meshgrid(x, y, row_major):
+    xx = x.repeat(len(y))
+    yy = y.view(-1, 1).repeat(1, len(x)).view(-1)
+    if row_major:
+        return xx, yy
+    else:
+        return yy, xx
+
+
+def single_level_grid_priors(featmap_size, level_idx, dtype, device, with_stride):
+    feat_h, feat_w = featmap_size
+    strides = [(8, 8), (16, 16), (32, 32)]
+    offset = 0
+    stride_w, stride_h = strides[level_idx]
+    shift_x = (torch.arange(0, feat_w, device=device) + offset) * stride_w
+    shift_x = shift_x.to(dtype)
+    shift_y = (torch.arange(0, feat_h, device=device) + offset) * stride_h
+    shift_y = shift_y.to(dtype)
+    shift_xx, shift_yy = meshgrid(shift_x, shift_y, True)
+
+    if not with_stride:
+        shifts = torch.stack([shift_xx, shift_yy], dim=-1)
+    else:
+        stride_w = shift_xx.new_full((shift_xx.shape[0],), stride_w).to(dtype)
+        stride_h = shift_yy.new_full((shift_yy.shape[0],), stride_h).to(dtype)
+        shifts = torch.stack([shift_xx, shift_yy, stride_w, stride_h], dim=-1)
+    return shifts.to(device)
+
+
+def grid_priors(featmap_sizes, dtype, device, with_stride):
+    num_levels = 3
+    multi_level_priors = []
+    for i in range(num_levels):
+        priors = single_level_grid_priors(
+            featmap_sizes[i],
+            level_idx=i,
+            dtype=dtype,
+            device=device,
+            with_stride=with_stride
+        )
+        multi_level_priors.append(priors)
+    return multi_level_priors
+
+
+def bbox_decode(priors, bbox_preds):
+    xys = (bbox_preds[..., :2] * priors[:, 2:]) + priors[:, :2]
+    whs = bbox_preds[..., 2:].exp() * priors[:, 2:]
+    tl_x = (xys[..., 0] - whs[..., 0] / 2)
+    tl_y = (xys[..., 1] - whs[..., 1] / 2)
+    br_x = (xys[..., 0] + whs[..., 0] / 2)
+    br_y = (xys[..., 1] + whs[..., 1] / 2)
+    return torch.stack([tl_x, tl_y, br_x, br_y], -1)
+
+
+def bbox_post_process(bboxes, scores, labels):
+    if bboxes.numel() > 0:
+        nms_cfg = {'type': 'nms', 'iou_threshold': 0.65}
+        det_bboxes, keep_idxs = batched_nms(bboxes, scores, labels, nms_cfg)
+        bboxes, scores, labels = bboxes[keep_idxs], scores[keep_idxs], labels[keep_idxs]
+        scores = det_bboxes[:, -1]
+        return bboxes, scores, labels
+    return bboxes, scores, labels
+
+
+def unletterbox(bboxes, input_shape, original_shape):
+    """Scale bounding boxes from letterboxed shape back to original image shape."""
+    input_h, input_w = input_shape
+    orig_h, orig_w = original_shape
+
+    scale = min(input_w / orig_w, input_h / orig_h)
+    new_w, new_h = orig_w * scale, orig_h * scale
+    pad_w = (input_w - new_w) / 2
+    pad_h = (input_h - new_h) / 2
+
+    bboxes[:, [0, 2]] = (bboxes[:, [0, 2]] - pad_w) / scale
+    bboxes[:, [1, 3]] = (bboxes[:, [1, 3]] - pad_h) / scale
+
+    return bboxes
+
+
+def postprocess(nn_output: List, input_shape: tuple, orig_shape: tuple) -> List[Dict]:
+    strides = (8, 16, 32)
+
+    cls_scores = [
+        torch.from_numpy(nn_output[2][np.newaxis, ...].transpose(0, 3, 1, 2)),
+        torch.from_numpy(nn_output[1][np.newaxis, ...].transpose(0, 3, 1, 2)),
+        torch.from_numpy(nn_output[0][np.newaxis, ...].transpose(0, 3, 1, 2)),
+    ]
+
+    featmap_sizes = [cls.shape[2:] for cls in cls_scores]
+    mlvl_priors = grid_priors(featmap_sizes, cls_scores[0].dtype, cls_scores[0].device, with_stride=True)
+
+    bbox_preds = [
+        torch.from_numpy(nn_output[5][np.newaxis, ...].transpose(0, 3, 1, 2)),
+        torch.from_numpy(nn_output[4][np.newaxis, ...].transpose(0, 3, 1, 2)),
+        torch.from_numpy(nn_output[3][np.newaxis, ...].transpose(0, 3, 1, 2)),
+    ]
+
+    objectnesses = [
+        torch.from_numpy(nn_output[8][np.newaxis, ...].transpose(0, 3, 1, 2)),
+        torch.from_numpy(nn_output[7][np.newaxis, ...].transpose(0, 3, 1, 2)),
+        torch.from_numpy(nn_output[6][np.newaxis, ...].transpose(0, 3, 1, 2)),
+    ]
+
+    flatten_cls_scores = torch.cat([
+        s.permute(0, 2, 3, 1).reshape(1, -1, 80)
+        for s in cls_scores
+    ], dim=1).sigmoid()
+
+    flatten_bbox_preds = torch.cat([
+        b.permute(0, 2, 3, 1).reshape(1, -1, 4)
+        for b in bbox_preds
+    ], dim=1)
+
+    flatten_objectness = torch.cat([
+        o.permute(0, 2, 3, 1).reshape(1, -1)
+        for o in objectnesses
+    ], dim=1).sigmoid()
+
+    flatten_priors = torch.cat(mlvl_priors)
+    flatten_bboxes = bbox_decode(flatten_priors, flatten_bbox_preds)
+
+    max_scores, labels = torch.max(flatten_cls_scores[0], 1)
+    valid_mask = flatten_objectness[0] * max_scores >= 0.01
+
+    bboxes = flatten_bboxes[0][valid_mask]
+    scores = max_scores[valid_mask] * flatten_objectness[0][valid_mask]
+    labels = labels[valid_mask]
+
+    bboxes, scores, labels = bbox_post_process(bboxes, scores, labels)
+
+    # Unletterbox bounding boxes
+    bboxes = unletterbox(bboxes, input_shape=input_shape, original_shape=orig_shape)
+
+    results = []
+    for score, bbox, label in zip(scores, bboxes, labels):
+        xmin, ymin, xmax, ymax = bbox
+        entry = {
+            "category_id": coco_ids[int(label)],
+            "score": float(score),
+            "bbox": [float(xmin), float(ymin), float(xmax - xmin), float(ymax - ymin)],
+        }
+        results.append(entry)
+    return results
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Copyright 2023 Synopsys, Inc.
 # This Synopsys software and all associated documentation are proprietary
 # to Synopsys, Inc. and may only be used pursuant to the terms and conditions
