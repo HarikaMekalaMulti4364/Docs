@@ -1,3 +1,10 @@
+xinds = torch.stack([
+    torch.arange(len(i), device=prediction.device) if i.dim() > 0 else torch.tensor([], device=prediction.device)
+    for i in xc
+])[..., None]
+
+
+
 File "/remote/us01sgnfs00562/NNSDK/harikam/har/examples/public_models/YoloV8x/model_data/postprocess.py", line 44, in <listcomp>
     xinds = torch.stack([torch.arange(len(i), device=prediction.device) for i in xc])[..., None]  # to track idxs
                                       ^^^^^^
