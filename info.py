@@ -1,3 +1,12 @@
+File "/remote/us01sgnfs00562/NNSDK/harikam/har/examples/public_models/YoloV8x/model_data/postprocess.py", line 108, in non_max_suppression
+    box, cls, mask = x.split((4, nc, nm), 1)
+                     ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/slowfs/us01dwt2p219/ARCJenkinsTools/ToolsCommon/SynopsysCaffe/1.7-eng1-nocuda-MX/Linux/lib/python3.11/site-packages/torch/_tensor.py", line 896, in split
+    return torch._VF.split_with_sizes(self, split_size, dim)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: split_with_sizes expects split_sizes to sum exactly to 84 (input tensor's size at dimension 1), but got split_sizes=[4, 8396, 0]
+
+
 xinds = torch.stack([
     torch.arange(len(i), device=prediction.device) if i.dim() > 0 else torch.tensor([], device=prediction.device)
     for i in xc
