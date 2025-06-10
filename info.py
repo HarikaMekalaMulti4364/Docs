@@ -1,3 +1,26 @@
+File "/remote/us01sgnfs00562/NNSDK/harikam/har/examples/public_models/YoloV8x/model_data/postprocess.py", line 44, in <listcomp>
+    xinds = torch.stack([torch.arange(len(i), device=prediction.device) for i in xc])[..., None]  # to track idxs
+                                      ^^^^^^
+  File "/slowfs/us01dwt2p219/ARCJenkinsTools/ToolsCommon/SynopsysCaffe/1.7-eng1-nocuda-MX/Linux/lib/python3.11/site-packages/torch/_tensor.py", line 1000, in __len__
+    raise TypeError("len() of a 0-d tensor")
+TypeError: len() of a 0-d tensor
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import numpy as np
 import torch
 from typing import List, Dict
