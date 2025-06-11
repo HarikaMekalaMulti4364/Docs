@@ -1,3 +1,9 @@
+git fetch origin
+git checkout yolox_without_letterbox
+git reset --hard origin/yolox_without_letterbox
+
+
+
 error: update_ref failed for ref 'refs/heads/yolox_without_letterbox': cannot lock ref 'refs/heads/yolox_without_letterbox': is at 70b84874cb4094e982f228b9897994f6d2b04386 but expected 859265eb937247fef8e9d5fdb4908190321846d1
 error: could not update refs/heads/yolox_without_letterbox
 
